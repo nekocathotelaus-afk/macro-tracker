@@ -2,6 +2,7 @@
 // All data lives in localStorage on this device/browser. Nothing is sent anywhere.
 
 const STORAGE_KEY_PREFIX = "macro-tracker-day-"; // + YYYY-MM-DD
+const WORKOUT_KEY_PREFIX = "macro-tracker-workout-day-"; // + YYYY-MM-DD
 const TARGETS_KEY = "macro-tracker-targets";
 const DEFAULT_TARGETS = { calories: 2000, carbs: 200, protein: 150, fat: 65 };
 
@@ -10,6 +11,7 @@ const MRING_R = 26, MRING_CIRC = 2 * Math.PI * MRING_R;
 
 let currentDate = new Date();
 let pendingPhoto = null; // data URL for the meal being added
+let activeTab = "nutrition"; // "nutrition" | "workouts"
 
 // ---------- Helpers ----------
 function dateKey(d) {
@@ -41,6 +43,38 @@ function loadTargets() {
 
 function saveTargets(targets) {
   localStorage.setItem(TARGETS_KEY, JSON.stringify(targets));
+}
+
+function loadWorkoutDay(d) {
+  const raw = localStorage.getItem(WORKOUT_KEY_PREFIX + dateKey(d));
+  return raw ? JSON.parse(raw) : [];
+}
+
+function saveWorkoutDay(d, entries) {
+  localStorage.setItem(WORKOUT_KEY_PREFIX + dateKey(d), JSON.stringify(entries));
+}
+
+// Scans every stored workout day (across all dates) — needed for progression,
+// which is inherently cross-date, unlike the daily nutrition totals.
+function getAllWorkoutEntriesByDate() {
+  const byDate = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(WORKOUT_KEY_PREFIX)) continue;
+    const date = key.slice(WORKOUT_KEY_PREFIX.length);
+    const entries = JSON.parse(localStorage.getItem(key) || "[]");
+    if (entries.length) byDate.push({ date, entries });
+  }
+  byDate.sort((a, b) => (a.date < b.date ? -1 : 1));
+  return byDate;
+}
+
+function getAllExerciseNames() {
+  const names = new Set();
+  for (const { entries } of getAllWorkoutEntriesByDate()) {
+    entries.forEach((e) => names.add(e.exercise));
+  }
+  return Array.from(names).sort((a, b) => a.localeCompare(b));
 }
 
 function computeStreak() {
@@ -114,6 +148,8 @@ function render() {
       listEl.appendChild(li);
     });
   }
+
+  renderWorkoutView();
 }
 
 function escapeHtml(str) {
@@ -122,16 +158,171 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function formatShortDate(isoDate) {
+  const d = new Date(isoDate + "T00:00:00");
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// ---------- Workouts ----------
+function renderWorkoutView() {
+  const entries = loadWorkoutDay(currentDate);
+  const listEl = document.getElementById("workoutList");
+  const emptyEl = document.getElementById("workoutEmptyState");
+  listEl.innerHTML = "";
+
+  if (entries.length === 0) {
+    emptyEl.style.display = "block";
+  } else {
+    emptyEl.style.display = "none";
+    entries.forEach((w) => {
+      const li = document.createElement("li");
+      li.className = "meal-item glass";
+      li.innerHTML = `
+        <div class="meal-thumb workout-thumb" aria-hidden="true">🏋️</div>
+        <div class="meal-info">
+          <div class="meal-name">${escapeHtml(w.exercise)}</div>
+          <div class="meal-macros">${w.weight}kg × ${w.reps} reps × ${w.sets} sets</div>
+        </div>
+        <button class="delete-btn" data-id="${w.id}" aria-label="Delete exercise">✕</button>
+      `;
+      listEl.appendChild(li);
+    });
+  }
+
+  const picker = document.getElementById("exercisePicker");
+  const names = getAllExerciseNames();
+  const previousSelection = picker.value;
+  picker.innerHTML = "";
+
+  if (names.length === 0) {
+    const opt = document.createElement("option");
+    opt.textContent = "No exercises logged yet";
+    opt.disabled = true;
+    picker.appendChild(opt);
+  } else {
+    names.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      picker.appendChild(opt);
+    });
+    if (names.includes(previousSelection)) picker.value = previousSelection;
+  }
+
+  const datalist = document.getElementById("exerciseNames");
+  datalist.innerHTML = names.map((n) => `<option value="${escapeHtml(n)}"></option>`).join("");
+
+  renderProgressionChart(picker.value);
+}
+
+function renderProgressionChart(exerciseName) {
+  const chartEl = document.getElementById("progressionChart");
+
+  if (!exerciseName) {
+    chartEl.innerHTML = `<p class="empty-state">Log an exercise to see progression here.</p>`;
+    return;
+  }
+
+  // One point per day: the heaviest weight logged that day for this exercise.
+  const points = [];
+  for (const { date, entries } of getAllWorkoutEntriesByDate()) {
+    const matches = entries.filter((e) => e.exercise === exerciseName);
+    if (matches.length === 0) continue;
+    points.push({ date, weight: Math.max(...matches.map((e) => e.weight)) });
+  }
+
+  if (points.length < 2) {
+    chartEl.innerHTML = `<p class="empty-state">Log this exercise a couple more times to see a trend.</p>`;
+    return;
+  }
+
+  const w = 300, h = 120, pad = 18;
+  const weights = points.map((p) => p.weight);
+  const minW = Math.min(...weights), maxW = Math.max(...weights);
+  const range = maxW - minW || 1;
+
+  const coords = points.map((p, i) => ({
+    x: pad + (i / (points.length - 1)) * (w - pad * 2),
+    y: h - pad - ((p.weight - minW) / range) * (h - pad * 2),
+    ...p,
+  }));
+
+  const pathD = coords.map((c, i) => (i === 0 ? `M${c.x},${c.y}` : `L${c.x},${c.y}`)).join(" ");
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+
+  chartEl.innerHTML = `
+    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
+      <path class="progression-line" d="${pathD}"></path>
+      <circle class="progression-dot" cx="${last.x}" cy="${last.y}" r="4"></circle>
+      <text class="progression-value-label" x="${last.x}" y="${Math.max(10, last.y - 8)}" text-anchor="end">${last.weight}kg</text>
+      <text class="progression-axis-label" x="${first.x}" y="${h - 4}" text-anchor="start">${formatShortDate(first.date)}</text>
+      <text class="progression-axis-label" x="${last.x}" y="${h - 4}" text-anchor="end">${formatShortDate(last.date)}</text>
+    </svg>
+  `;
+}
+
+// ---------- Tabs ----------
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById("nutritionView").classList.toggle("hidden", tab !== "nutrition");
+  document.getElementById("workoutView").classList.toggle("hidden", tab !== "workouts");
+  document.getElementById("tabNutrition").classList.toggle("active", tab === "nutrition");
+  document.getElementById("tabWorkouts").classList.toggle("active", tab === "workouts");
+  document.getElementById("fabAdd").textContent = tab === "nutrition" ? "📷" : "🏋️";
+  document.getElementById("fabAdd").setAttribute("aria-label", tab === "nutrition" ? "Add meal" : "Add exercise");
+  document.getElementById("navHint").textContent = tab === "nutrition" ? "Tap to log a meal" : "Tap to log an exercise";
+}
+
+document.getElementById("tabNutrition").addEventListener("click", () => switchTab("nutrition"));
+document.getElementById("tabWorkouts").addEventListener("click", () => switchTab("workouts"));
+document.getElementById("exercisePicker").addEventListener("change", (e) => renderProgressionChart(e.target.value));
+
 // ---------- Sheets (bottom modals) ----------
 function openSheet(el) { el.classList.add("open"); }
 function closeSheet(el) { el.classList.remove("open"); }
 
 const addSheet = document.getElementById("addSheet");
+const addWorkoutSheet = document.getElementById("addWorkoutSheet");
 const settingsSheet = document.getElementById("settingsSheet");
 
-document.getElementById("fabAdd").addEventListener("click", () => openSheet(addSheet));
+document.getElementById("fabAdd").addEventListener("click", () => {
+  openSheet(activeTab === "nutrition" ? addSheet : addWorkoutSheet);
+});
 document.getElementById("sheetCancel").addEventListener("click", () => closeSheet(addSheet));
 addSheet.addEventListener("click", (e) => { if (e.target === addSheet) closeSheet(addSheet); });
+
+document.getElementById("workoutSheetCancel").addEventListener("click", () => closeSheet(addWorkoutSheet));
+addWorkoutSheet.addEventListener("click", (e) => { if (e.target === addWorkoutSheet) closeSheet(addWorkoutSheet); });
+
+document.getElementById("workoutForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+
+  const entry = {
+    id: Date.now().toString(),
+    exercise: document.getElementById("exerciseName").value.trim(),
+    weight: Number(document.getElementById("exerciseWeight").value) || 0,
+    sets: Number(document.getElementById("exerciseSets").value) || 0,
+    reps: Number(document.getElementById("exerciseReps").value) || 0,
+    time: new Date().toISOString(),
+  };
+
+  const entries = loadWorkoutDay(currentDate);
+  entries.push(entry);
+  saveWorkoutDay(currentDate, entries);
+
+  e.target.reset();
+  closeSheet(addWorkoutSheet);
+  render();
+});
+
+document.getElementById("workoutList").addEventListener("click", (e) => {
+  if (!e.target.classList.contains("delete-btn")) return;
+  const id = e.target.getAttribute("data-id");
+  const entries = loadWorkoutDay(currentDate).filter((w) => w.id !== id);
+  saveWorkoutDay(currentDate, entries);
+  render();
+});
 
 document.getElementById("settingsBtn").addEventListener("click", () => {
   const t = loadTargets();

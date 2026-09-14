@@ -20,7 +20,13 @@
     <div class="streak glass" title="Day streak">🔥<span id="streakCount">0</span></div>
   </header>
 
+  <div class="tab-switch glass">
+    <button id="tabNutrition" class="tab-btn active">Nutrition</button>
+    <button id="tabWorkouts" class="tab-btn">Workouts</button>
+  </div>
+
   <main>
+    <section id="nutritionView">
     <section class="hero-card glass">
       <div class="ring-wrap">
         <svg viewBox="0 0 160 160" class="ring-svg" aria-hidden="true">
@@ -63,10 +69,30 @@
       <ul id="mealList" class="meal-items"></ul>
       <p id="emptyState" class="empty-state">No meals logged yet — tap the camera below to add one.</p>
     </section>
+    </section>
+
+    <section id="workoutView" class="hidden">
+      <section class="progression-card glass">
+        <h2>Progression</h2>
+        <div class="field">
+          <label for="exercisePicker">Exercise</label>
+          <select id="exercisePicker"></select>
+        </div>
+        <div id="progressionChart" class="progression-chart">
+          <p id="progressionEmpty" class="empty-state">Log the same exercise a couple of times to see progression here.</p>
+        </div>
+      </section>
+
+      <section class="meal-list">
+        <h2>Today's workout</h2>
+        <ul id="workoutList" class="meal-items"></ul>
+        <p id="workoutEmptyState" class="empty-state">No exercises logged yet — tap the button below to add one.</p>
+      </section>
+    </section>
   </main>
 
   <nav class="bottom-nav glass">
-    <span class="nav-hint">Tap to log a meal</span>
+    <span class="nav-hint" id="navHint">Tap to log a meal</span>
     <button id="fabAdd" class="fab" aria-label="Add meal">📷</button>
   </nav>
 
@@ -105,6 +131,38 @@
         <div class="sheet-actions">
           <button type="button" id="sheetCancel" class="ghost-btn">Cancel</button>
           <button type="submit" class="primary-btn">Save meal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add workout bottom sheet -->
+  <div id="addWorkoutSheet" class="sheet-backdrop">
+    <div class="sheet glass">
+      <div class="sheet-handle"></div>
+      <h2>Log an exercise</h2>
+      <form id="workoutForm">
+        <input type="text" id="exerciseName" list="exerciseNames" placeholder="Exercise (e.g. Bench press)" required />
+        <datalist id="exerciseNames"></datalist>
+
+        <div class="macro-inputs">
+          <div class="field">
+            <label for="exerciseWeight">Weight (kg)</label>
+            <input type="number" id="exerciseWeight" min="0" step="0.5" required />
+          </div>
+          <div class="field">
+            <label for="exerciseSets">Sets</label>
+            <input type="number" id="exerciseSets" min="1" step="1" required />
+          </div>
+          <div class="field">
+            <label for="exerciseReps">Reps</label>
+            <input type="number" id="exerciseReps" min="1" step="1" required />
+          </div>
+        </div>
+
+        <div class="sheet-actions">
+          <button type="button" id="workoutSheetCancel" class="ghost-btn">Cancel</button>
+          <button type="submit" class="primary-btn">Save exercise</button>
         </div>
       </form>
     </div>
