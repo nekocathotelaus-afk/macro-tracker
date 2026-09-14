@@ -142,8 +142,16 @@
       <div class="sheet-handle"></div>
       <h2>Log an exercise</h2>
       <form id="workoutForm">
-        <input type="text" id="exerciseName" list="exerciseNames" placeholder="Exercise (e.g. Bench press)" required />
-        <datalist id="exerciseNames"></datalist>
+        <div class="field">
+          <label for="exerciseSelect">Exercise</label>
+          <select id="exerciseSelect" required></select>
+        </div>
+        <input type="text" id="exerciseCustomName" class="hidden" placeholder="Type the exercise name" />
+
+        <div class="field">
+          <label for="oneRepMaxInput">Your 1-rep max for this exercise (kg, optional)</label>
+          <input type="number" id="oneRepMaxInput" min="0" step="0.5" placeholder="e.g. 100" />
+        </div>
 
         <div class="macro-inputs">
           <div class="field">
@@ -159,6 +167,7 @@
             <input type="number" id="exerciseReps" min="1" step="1" required />
           </div>
         </div>
+        <p id="pctOneRm" class="pct-hint"></p>
 
         <div class="sheet-actions">
           <button type="button" id="workoutSheetCancel" class="ghost-btn">Cancel</button>

@@ -4,7 +4,19 @@
 const STORAGE_KEY_PREFIX = "macro-tracker-day-"; // + YYYY-MM-DD
 const WORKOUT_KEY_PREFIX = "macro-tracker-workout-day-"; // + YYYY-MM-DD
 const TARGETS_KEY = "macro-tracker-targets";
+const ONE_RM_KEY = "macro-tracker-one-rm"; // { [exerciseName]: kg }
 const DEFAULT_TARGETS = { calories: 2000, carbs: 200, protein: 150, fat: 65 };
+
+const EXERCISE_LIBRARY = {
+  Chest: ["Bench Press", "Incline Bench Press", "Dumbbell Press", "Push-up", "Chest Fly"],
+  Back: ["Deadlift", "Barbell Row", "Lat Pulldown", "Pull-up", "Seated Cable Row"],
+  Legs: ["Squat", "Leg Press", "Lunges", "Leg Extension", "Leg Curl", "Calf Raise"],
+  Shoulders: ["Overhead Press", "Lateral Raise", "Front Raise", "Face Pull"],
+  Arms: ["Bicep Curl", "Hammer Curl", "Tricep Pushdown", "Tricep Dip", "Skull Crusher"],
+  Core: ["Plank", "Sit-up", "Hanging Leg Raise", "Russian Twist"],
+  "Full Body / Conditioning": ["Kettlebell Swing", "Box Jump", "Burpee", "Clean and Jerk", "Snatch", "Farmer's Carry"],
+};
+const CUSTOM_OPTION_VALUE = "__custom__";
 
 const RING_R = 70, RING_CIRC = 2 * Math.PI * RING_R;
 const MRING_R = 26, MRING_CIRC = 2 * Math.PI * MRING_R;
@@ -75,6 +87,89 @@ function getAllExerciseNames() {
     entries.forEach((e) => names.add(e.exercise));
   }
   return Array.from(names).sort((a, b) => a.localeCompare(b));
+}
+
+function loadOneRepMaxes() {
+  const raw = localStorage.getItem(ONE_RM_KEY);
+  return raw ? JSON.parse(raw) : {};
+}
+
+function saveOneRepMax(exercise, kg) {
+  const all = loadOneRepMaxes();
+  if (kg > 0) all[exercise] = kg;
+  localStorage.setItem(ONE_RM_KEY, JSON.stringify(all));
+}
+
+// Populate the exercise <select> with: previously-logged custom exercises (if any,
+// not already in the library) first, then the built-in library grouped by category,
+// then a trailing "Custom exercise" option — reliable everywhere, unlike <datalist>
+// which iOS Safari silently ignores.
+function populateExerciseSelect() {
+  const select = document.getElementById("exerciseSelect");
+  const previousValue = select.value;
+  select.innerHTML = "";
+
+  const libraryNames = new Set(Object.values(EXERCISE_LIBRARY).flat());
+  const loggedNames = getAllExerciseNames().filter((n) => !libraryNames.has(n));
+
+  if (loggedNames.length) {
+    const group = document.createElement("optgroup");
+    group.label = "Your exercises";
+    loggedNames.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      group.appendChild(opt);
+    });
+    select.appendChild(group);
+  }
+
+  for (const [category, exercises] of Object.entries(EXERCISE_LIBRARY)) {
+    const group = document.createElement("optgroup");
+    group.label = category;
+    exercises.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      group.appendChild(opt);
+    });
+    select.appendChild(group);
+  }
+
+  const customOpt = document.createElement("option");
+  customOpt.value = CUSTOM_OPTION_VALUE;
+  customOpt.textContent = "+ Custom exercise…";
+  select.appendChild(customOpt);
+
+  if ([...select.options].some((o) => o.value === previousValue)) {
+    select.value = previousValue;
+  }
+
+  const isCustom = select.value === CUSTOM_OPTION_VALUE;
+  document.getElementById("exerciseCustomName").classList.toggle("hidden", !isCustom);
+  document.getElementById("oneRepMaxInput").value = loadOneRepMaxes()[currentExerciseName()] || "";
+  updatePctHint();
+}
+
+function currentExerciseName() {
+  const select = document.getElementById("exerciseSelect");
+  if (select.value === CUSTOM_OPTION_VALUE) {
+    return document.getElementById("exerciseCustomName").value.trim();
+  }
+  return select.value;
+}
+
+function updatePctHint() {
+  const exercise = currentExerciseName();
+  const oneRm = Number(document.getElementById("oneRepMaxInput").value) || loadOneRepMaxes()[exercise] || 0;
+  const weight = Number(document.getElementById("exerciseWeight").value) || 0;
+  const hintEl = document.getElementById("pctOneRm");
+
+  if (oneRm > 0 && weight > 0) {
+    hintEl.textContent = `≈ ${Math.round((weight / oneRm) * 100)}% of your ${oneRm}kg 1RM`;
+  } else {
+    hintEl.textContent = "";
+  }
 }
 
 function computeStreak() {
@@ -177,11 +272,12 @@ function renderWorkoutView() {
     entries.forEach((w) => {
       const li = document.createElement("li");
       li.className = "meal-item glass";
+      const pctText = w.pct ? ` (${w.pct}% 1RM)` : "";
       li.innerHTML = `
         <div class="meal-thumb workout-thumb" aria-hidden="true">🏋️</div>
         <div class="meal-info">
           <div class="meal-name">${escapeHtml(w.exercise)}</div>
-          <div class="meal-macros">${w.weight}kg × ${w.reps} reps × ${w.sets} sets</div>
+          <div class="meal-macros">${w.weight}kg${pctText} × ${w.reps} reps × ${w.sets} sets</div>
         </div>
         <button class="delete-btn" data-id="${w.id}" aria-label="Delete exercise">✕</button>
       `;
@@ -209,9 +305,7 @@ function renderWorkoutView() {
     if (names.includes(previousSelection)) picker.value = previousSelection;
   }
 
-  const datalist = document.getElementById("exerciseNames");
-  datalist.innerHTML = names.map((n) => `<option value="${escapeHtml(n)}"></option>`).join("");
-
+  populateExerciseSelect();
   renderProgressionChart(picker.value);
 }
 
@@ -295,15 +389,34 @@ addSheet.addEventListener("click", (e) => { if (e.target === addSheet) closeShee
 document.getElementById("workoutSheetCancel").addEventListener("click", () => closeSheet(addWorkoutSheet));
 addWorkoutSheet.addEventListener("click", (e) => { if (e.target === addWorkoutSheet) closeSheet(addWorkoutSheet); });
 
+document.getElementById("exerciseSelect").addEventListener("change", (e) => {
+  const isCustom = e.target.value === CUSTOM_OPTION_VALUE;
+  document.getElementById("exerciseCustomName").classList.toggle("hidden", !isCustom);
+  const oneRm = loadOneRepMaxes()[currentExerciseName()] || "";
+  document.getElementById("oneRepMaxInput").value = oneRm;
+  updatePctHint();
+});
+document.getElementById("exerciseCustomName").addEventListener("input", updatePctHint);
+document.getElementById("oneRepMaxInput").addEventListener("input", updatePctHint);
+document.getElementById("exerciseWeight").addEventListener("input", updatePctHint);
+
 document.getElementById("workoutForm").addEventListener("submit", (e) => {
   e.preventDefault();
 
+  const exercise = currentExerciseName();
+  if (!exercise) { document.getElementById("exerciseCustomName").focus(); return; }
+
+  const weight = Number(document.getElementById("exerciseWeight").value) || 0;
+  const oneRm = Number(document.getElementById("oneRepMaxInput").value) || 0;
+  if (oneRm > 0) saveOneRepMax(exercise, oneRm);
+
   const entry = {
     id: Date.now().toString(),
-    exercise: document.getElementById("exerciseName").value.trim(),
-    weight: Number(document.getElementById("exerciseWeight").value) || 0,
+    exercise,
+    weight,
     sets: Number(document.getElementById("exerciseSets").value) || 0,
     reps: Number(document.getElementById("exerciseReps").value) || 0,
+    pct: oneRm > 0 && weight > 0 ? Math.round((weight / oneRm) * 100) : null,
     time: new Date().toISOString(),
   };
 
@@ -312,6 +425,8 @@ document.getElementById("workoutForm").addEventListener("submit", (e) => {
   saveWorkoutDay(currentDate, entries);
 
   e.target.reset();
+  document.getElementById("exerciseCustomName").classList.add("hidden");
+  document.getElementById("pctOneRm").textContent = "";
   closeSheet(addWorkoutSheet);
   render();
 });
