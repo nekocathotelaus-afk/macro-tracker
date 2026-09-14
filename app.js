@@ -21,6 +21,10 @@ const EXERCISE_LIBRARY = {
 };
 const CUSTOM_OPTION_VALUE = "__custom__";
 
+// Backend that holds the Gemini API key server-side (never in this public repo).
+// Set after the backend is deployed to Vercel — see api-backend/ in this project.
+const PHOTO_ANALYZE_URL = "https://macro-tracker-api.vercel.app/api/analyze-food";
+
 const RING_R = 70, RING_CIRC = 2 * Math.PI * RING_R;
 const MRING_R = 26, MRING_CIRC = 2 * Math.PI * MRING_R;
 
@@ -641,15 +645,68 @@ document.getElementById("nextDay").addEventListener("click", () => {
   render();
 });
 
-document.getElementById("photoInput").addEventListener("change", (e) => {
+// Downscale + re-encode a photo before sending it anywhere: phone photos can be
+// several MB, which is slow to upload and can exceed the backend's request-size
+// limit. Also used for the full-size preview thumbnail stored with the meal.
+function compressImage(file, maxDimension, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = () => { img.src = reader.result; };
+    reader.onerror = reject;
+    img.onload = () => {
+      const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function analyzeFoodPhoto(dataUrl) {
+  const statusEl = document.getElementById("analyzeStatus");
+  statusEl.textContent = "Analyzing photo…";
+
+  try {
+    const base64 = dataUrl.split(",")[1];
+    const res = await fetch(PHOTO_ANALYZE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageBase64: base64, mimeType: "image/jpeg" }),
+    });
+
+    if (!res.ok) throw new Error(`Backend returned ${res.status}`);
+    const result = await res.json();
+
+    if (!document.getElementById("mealName").value) {
+      document.getElementById("mealName").value = result.description || "";
+    }
+    document.getElementById("mealCalories").value = Math.round(result.calories || 0);
+    document.getElementById("mealCarbs").value = Math.round(result.carbs_g || 0);
+    document.getElementById("mealProtein").value = Math.round(result.protein_g || 0);
+    document.getElementById("mealFat").value = Math.round(result.fat_g || 0);
+
+    statusEl.textContent = "Estimated from photo — check the numbers before saving.";
+  } catch (err) {
+    statusEl.textContent = "Couldn't analyze the photo — enter macros manually.";
+  }
+}
+
+document.getElementById("photoInput").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    pendingPhoto = reader.result;
-    document.getElementById("photoPreview").innerHTML = `<img src="${pendingPhoto}" alt="Meal photo" />`;
-  };
-  reader.readAsDataURL(file);
+
+  // Full-size-ish version for the saved meal's thumbnail.
+  pendingPhoto = await compressImage(file, 800, 0.8);
+  document.getElementById("photoPreview").innerHTML = `<img src="${pendingPhoto}" alt="Meal photo" />`;
+
+  // Smaller version for the AI call — plenty for food recognition, faster upload.
+  const analysisImage = await compressImage(file, 512, 0.6);
+  analyzeFoodPhoto(analysisImage);
 });
 
 document.getElementById("mealForm").addEventListener("submit", (e) => {

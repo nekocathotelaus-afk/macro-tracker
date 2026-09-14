@@ -142,9 +142,10 @@
       <h2>Log a meal</h2>
       <form id="mealForm">
         <label class="photo-label" for="photoInput">
-          <div id="photoPreview" class="photo-preview">📷 Add photo</div>
+          <div id="photoPreview" class="photo-preview">📷 Add photo — auto-fills macros</div>
           <input type="file" id="photoInput" accept="image/*" capture="environment" hidden />
         </label>
+        <p id="analyzeStatus" class="pct-hint"></p>
 
         <input type="text" id="mealName" placeholder="Meal name (e.g. Chicken & rice)" required />
 
