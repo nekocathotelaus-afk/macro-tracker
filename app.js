@@ -3,9 +3,12 @@
 
 const STORAGE_KEY_PREFIX = "macro-tracker-day-"; // + YYYY-MM-DD
 const WORKOUT_KEY_PREFIX = "macro-tracker-workout-day-"; // + YYYY-MM-DD
+const WEIGHT_KEY_PREFIX = "macro-tracker-weight-day-"; // + YYYY-MM-DD
 const TARGETS_KEY = "macro-tracker-targets";
 const ONE_RM_KEY = "macro-tracker-one-rm"; // { [exerciseName]: kg }
+const PROFILE_KEY = "macro-tracker-profile"; // { activityLevel }
 const DEFAULT_TARGETS = { calories: 2000, carbs: 200, protein: 150, fat: 65 };
+const DEFAULT_PROFILE = { activityLevel: 24 };
 
 const EXERCISE_LIBRARY = {
   Chest: ["Bench Press", "Incline Bench Press", "Dumbbell Press", "Push-up", "Chest Fly"],
@@ -23,7 +26,8 @@ const MRING_R = 26, MRING_CIRC = 2 * Math.PI * MRING_R;
 
 let currentDate = new Date();
 let pendingPhoto = null; // data URL for the meal being added
-let activeTab = "nutrition"; // "nutrition" | "workouts"
+let pendingWeightPhoto = null; // data URL for the weigh-in being added
+let activeTab = "nutrition"; // "nutrition" | "workouts" | "weight"
 
 // ---------- Helpers ----------
 function dateKey(d) {
@@ -98,6 +102,67 @@ function saveOneRepMax(exercise, kg) {
   const all = loadOneRepMaxes();
   if (kg > 0) all[exercise] = kg;
   localStorage.setItem(ONE_RM_KEY, JSON.stringify(all));
+}
+
+function loadWeightDay(d) {
+  const raw = localStorage.getItem(WEIGHT_KEY_PREFIX + dateKey(d));
+  return raw ? JSON.parse(raw) : [];
+}
+
+function saveWeightDay(d, entries) {
+  localStorage.setItem(WEIGHT_KEY_PREFIX + dateKey(d), JSON.stringify(entries));
+}
+
+// Cross-date, like getAllWorkoutEntriesByDate — weight trend needs every day, not just "today".
+function getAllWeightEntriesByDate() {
+  const byDate = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(WEIGHT_KEY_PREFIX)) continue;
+    const date = key.slice(WEIGHT_KEY_PREFIX.length);
+    const entries = JSON.parse(localStorage.getItem(key) || "[]");
+    if (entries.length) byDate.push({ date, entries });
+  }
+  byDate.sort((a, b) => (a.date < b.date ? -1 : 1));
+  return byDate;
+}
+
+function loadProfile() {
+  const raw = localStorage.getItem(PROFILE_KEY);
+  return raw ? { ...DEFAULT_PROFILE, ...JSON.parse(raw) } : { ...DEFAULT_PROFILE };
+}
+
+function saveProfile(partial) {
+  localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...loadProfile(), ...partial }));
+}
+
+// Shared line-chart renderer — used by both exercise progression and weight trend.
+// Caller is responsible for the "not enough data yet" empty state; this assumes >=2 points.
+function drawTrendChart(chartEl, points, unit) {
+  const w = 300, h = 120, pad = 18;
+  const values = points.map((p) => p.value);
+  const minV = Math.min(...values), maxV = Math.max(...values);
+  const range = maxV - minV || 1;
+
+  const coords = points.map((p, i) => ({
+    x: pad + (i / (points.length - 1)) * (w - pad * 2),
+    y: h - pad - ((p.value - minV) / range) * (h - pad * 2),
+    ...p,
+  }));
+
+  const pathD = coords.map((c, i) => (i === 0 ? `M${c.x},${c.y}` : `L${c.x},${c.y}`)).join(" ");
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+
+  chartEl.innerHTML = `
+    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
+      <path class="progression-line" d="${pathD}"></path>
+      <circle class="progression-dot" cx="${last.x}" cy="${last.y}" r="4"></circle>
+      <text class="progression-value-label" x="${last.x}" y="${Math.max(10, last.y - 8)}" text-anchor="end">${last.value}${unit}</text>
+      <text class="progression-axis-label" x="${first.x}" y="${h - 4}" text-anchor="start">${formatShortDate(first.date)}</text>
+      <text class="progression-axis-label" x="${last.x}" y="${h - 4}" text-anchor="end">${formatShortDate(last.date)}</text>
+    </svg>
+  `;
 }
 
 // Populate the exercise <select> with: previously-logged custom exercises (if any,
@@ -245,6 +310,7 @@ function render() {
   }
 
   renderWorkoutView();
+  renderWeightView();
 }
 
 function escapeHtml(str) {
@@ -322,7 +388,7 @@ function renderProgressionChart(exerciseName) {
   for (const { date, entries } of getAllWorkoutEntriesByDate()) {
     const matches = entries.filter((e) => e.exercise === exerciseName);
     if (matches.length === 0) continue;
-    points.push({ date, weight: Math.max(...matches.map((e) => e.weight)) });
+    points.push({ date, value: Math.max(...matches.map((e) => e.weight)) });
   }
 
   if (points.length < 2) {
@@ -330,47 +396,106 @@ function renderProgressionChart(exerciseName) {
     return;
   }
 
-  const w = 300, h = 120, pad = 18;
-  const weights = points.map((p) => p.weight);
-  const minW = Math.min(...weights), maxW = Math.max(...weights);
-  const range = maxW - minW || 1;
+  drawTrendChart(chartEl, points, "kg");
+}
 
-  const coords = points.map((p, i) => ({
-    x: pad + (i / (points.length - 1)) * (w - pad * 2),
-    y: h - pad - ((p.weight - minW) / range) * (h - pad * 2),
-    ...p,
-  }));
+// ---------- Weight ----------
+function renderWeightView() {
+  const profile = loadProfile();
+  document.getElementById("activityLevel").value = profile.activityLevel;
 
-  const pathD = coords.map((c, i) => (i === 0 ? `M${c.x},${c.y}` : `L${c.x},${c.y}`)).join(" ");
-  const first = coords[0];
-  const last = coords[coords.length - 1];
+  const todaysEntries = loadWeightDay(currentDate);
+  const listEl = document.getElementById("weightList");
+  const emptyEl = document.getElementById("weightEmptyState");
+  listEl.innerHTML = "";
 
-  chartEl.innerHTML = `
-    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
-      <path class="progression-line" d="${pathD}"></path>
-      <circle class="progression-dot" cx="${last.x}" cy="${last.y}" r="4"></circle>
-      <text class="progression-value-label" x="${last.x}" y="${Math.max(10, last.y - 8)}" text-anchor="end">${last.weight}kg</text>
-      <text class="progression-axis-label" x="${first.x}" y="${h - 4}" text-anchor="start">${formatShortDate(first.date)}</text>
-      <text class="progression-axis-label" x="${last.x}" y="${h - 4}" text-anchor="end">${formatShortDate(last.date)}</text>
-    </svg>
-  `;
+  if (todaysEntries.length === 0) {
+    emptyEl.style.display = "block";
+  } else {
+    emptyEl.style.display = "none";
+    todaysEntries.forEach((wt) => {
+      const li = document.createElement("li");
+      li.className = "meal-item glass";
+      li.innerHTML = `
+        ${wt.photo ? `<img class="meal-thumb" src="${wt.photo}" alt="" />` : `<div class="meal-thumb"></div>`}
+        <div class="meal-info">
+          <div class="meal-name">${wt.weight}kg</div>
+        </div>
+        <button class="delete-btn" data-id="${wt.id}" aria-label="Delete weigh-in">✕</button>
+      `;
+      listEl.appendChild(li);
+    });
+  }
+
+  const allByDate = getAllWeightEntriesByDate();
+  const chartEl = document.getElementById("weightChart");
+
+  if (allByDate.length === 0) {
+    document.getElementById("currentWeightVal").textContent = "—";
+    document.getElementById("startingWeightVal").textContent = "—";
+    document.getElementById("suggestedCalories").textContent = "—";
+    chartEl.innerHTML = `<p class="empty-state">Log your weight a couple of times to see a trend.</p>`;
+    return;
+  }
+
+  const startingWeight = allByDate[0].entries[0].weight;
+  const lastGroup = allByDate[allByDate.length - 1];
+  const currentWeight = lastGroup.entries[lastGroup.entries.length - 1].weight;
+
+  document.getElementById("currentWeightVal").textContent = currentWeight;
+  document.getElementById("startingWeightVal").textContent = startingWeight;
+
+  const activityLevel = Number(document.getElementById("activityLevel").value) || DEFAULT_PROFILE.activityLevel;
+  const maintenance = Math.round(currentWeight * activityLevel);
+  document.getElementById("suggestedCalories").textContent = Math.max(0, maintenance - 200);
+
+  const points = allByDate.map(({ date, entries }) => ({ date, value: entries[entries.length - 1].weight }));
+  if (points.length < 2) {
+    chartEl.innerHTML = `<p class="empty-state">Log your weight a couple more times to see a trend.</p>`;
+  } else {
+    drawTrendChart(chartEl, points, "kg");
+  }
 }
 
 // ---------- Tabs ----------
+const TAB_META = {
+  nutrition: { fabIcon: "📷", fabLabel: "Add meal", hint: "Tap to log a meal" },
+  workouts: { fabIcon: "🏋️", fabLabel: "Add exercise", hint: "Tap to log an exercise" },
+  weight: { fabIcon: "⚖️", fabLabel: "Add weigh-in", hint: "Tap to log your weight" },
+};
+
 function switchTab(tab) {
   activeTab = tab;
   document.getElementById("nutritionView").classList.toggle("hidden", tab !== "nutrition");
   document.getElementById("workoutView").classList.toggle("hidden", tab !== "workouts");
+  document.getElementById("weightView").classList.toggle("hidden", tab !== "weight");
   document.getElementById("tabNutrition").classList.toggle("active", tab === "nutrition");
   document.getElementById("tabWorkouts").classList.toggle("active", tab === "workouts");
-  document.getElementById("fabAdd").textContent = tab === "nutrition" ? "📷" : "🏋️";
-  document.getElementById("fabAdd").setAttribute("aria-label", tab === "nutrition" ? "Add meal" : "Add exercise");
-  document.getElementById("navHint").textContent = tab === "nutrition" ? "Tap to log a meal" : "Tap to log an exercise";
+  document.getElementById("tabWeight").classList.toggle("active", tab === "weight");
+
+  const meta = TAB_META[tab];
+  document.getElementById("fabAdd").textContent = meta.fabIcon;
+  document.getElementById("fabAdd").setAttribute("aria-label", meta.fabLabel);
+  document.getElementById("navHint").textContent = meta.hint;
 }
 
 document.getElementById("tabNutrition").addEventListener("click", () => switchTab("nutrition"));
 document.getElementById("tabWorkouts").addEventListener("click", () => switchTab("workouts"));
+document.getElementById("tabWeight").addEventListener("click", () => switchTab("weight"));
 document.getElementById("exercisePicker").addEventListener("change", (e) => renderProgressionChart(e.target.value));
+document.getElementById("activityLevel").addEventListener("change", (e) => {
+  saveProfile({ activityLevel: Number(e.target.value) });
+  renderWeightView();
+});
+document.getElementById("applySuggestion").addEventListener("click", () => {
+  const suggested = Number(document.getElementById("suggestedCalories").textContent);
+  if (!suggested) return;
+  const targets = loadTargets();
+  targets.calories = suggested;
+  saveTargets(targets);
+  render();
+  switchTab("nutrition");
+});
 
 // ---------- Sheets (bottom modals) ----------
 function openSheet(el) { el.classList.add("open"); }
@@ -378,13 +503,56 @@ function closeSheet(el) { el.classList.remove("open"); }
 
 const addSheet = document.getElementById("addSheet");
 const addWorkoutSheet = document.getElementById("addWorkoutSheet");
+const addWeightSheet = document.getElementById("addWeightSheet");
 const settingsSheet = document.getElementById("settingsSheet");
+const SHEET_BY_TAB = { nutrition: addSheet, workouts: addWorkoutSheet, weight: addWeightSheet };
 
-document.getElementById("fabAdd").addEventListener("click", () => {
-  openSheet(activeTab === "nutrition" ? addSheet : addWorkoutSheet);
-});
+document.getElementById("fabAdd").addEventListener("click", () => openSheet(SHEET_BY_TAB[activeTab]));
 document.getElementById("sheetCancel").addEventListener("click", () => closeSheet(addSheet));
 addSheet.addEventListener("click", (e) => { if (e.target === addSheet) closeSheet(addSheet); });
+
+document.getElementById("weightSheetCancel").addEventListener("click", () => closeSheet(addWeightSheet));
+addWeightSheet.addEventListener("click", (e) => { if (e.target === addWeightSheet) closeSheet(addWeightSheet); });
+
+document.getElementById("weightPhotoInput").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    pendingWeightPhoto = reader.result;
+    document.getElementById("weightPhotoPreview").innerHTML = `<img src="${pendingWeightPhoto}" alt="Progress photo" />`;
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById("weightForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+
+  const entry = {
+    id: Date.now().toString(),
+    weight: Number(document.getElementById("weightInput").value) || 0,
+    photo: pendingWeightPhoto,
+    time: new Date().toISOString(),
+  };
+
+  const entries = loadWeightDay(currentDate);
+  entries.push(entry);
+  saveWeightDay(currentDate, entries);
+
+  e.target.reset();
+  pendingWeightPhoto = null;
+  document.getElementById("weightPhotoPreview").innerHTML = "📷 Add progress photo (optional)";
+  closeSheet(addWeightSheet);
+  render();
+});
+
+document.getElementById("weightList").addEventListener("click", (e) => {
+  if (!e.target.classList.contains("delete-btn")) return;
+  const id = e.target.getAttribute("data-id");
+  const entries = loadWeightDay(currentDate).filter((wt) => wt.id !== id);
+  saveWeightDay(currentDate, entries);
+  render();
+});
 
 document.getElementById("workoutSheetCancel").addEventListener("click", () => closeSheet(addWorkoutSheet));
 addWorkoutSheet.addEventListener("click", (e) => { if (e.target === addWorkoutSheet) closeSheet(addWorkoutSheet); });

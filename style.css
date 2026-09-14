@@ -218,6 +218,25 @@ main { padding: 16px; display: flex; flex-direction: column; gap: 20px; }
 }
 .macro-ring-label span { color: var(--text-primary); font-weight: 600; }
 
+/* ---- Weight tab ---- */
+.weight-hero { text-align: center; }
+.starting-weight-label { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+.activity-field { width: 100%; margin-top: 4px; }
+.suggestion-box {
+  width: 100%;
+  border-radius: 16px;
+  padding: 14px;
+  background: var(--track);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+.suggestion-label { font-size: 12px; color: var(--text-secondary); margin: 0; }
+.suggestion-value { font-size: 22px; font-weight: 700; }
+#applySuggestion { width: auto; padding: 8px 16px; font-size: 13px; }
+
 /* ---- Progression card ---- */
 .progression-card {
   border-radius: 24px;
