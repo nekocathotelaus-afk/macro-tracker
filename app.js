@@ -1,9 +1,12 @@
-// ===== Macro Tracker — Phase 1 MVP =====
+// ===== Macro Tracker — Phase 1 MVP (Bite-style: rings + camera-first FAB) =====
 // All data lives in localStorage on this device/browser. Nothing is sent anywhere.
 
 const STORAGE_KEY_PREFIX = "macro-tracker-day-"; // + YYYY-MM-DD
 const TARGETS_KEY = "macro-tracker-targets";
 const DEFAULT_TARGETS = { calories: 2000, carbs: 200, protein: 150, fat: 65 };
+
+const RING_R = 70, RING_CIRC = 2 * Math.PI * RING_R;
+const MRING_R = 26, MRING_CIRC = 2 * Math.PI * MRING_R;
 
 let currentDate = new Date();
 let pendingPhoto = null; // data URL for the meal being added
@@ -40,9 +43,28 @@ function saveTargets(targets) {
   localStorage.setItem(TARGETS_KEY, JSON.stringify(targets));
 }
 
+function computeStreak() {
+  let count = 0;
+  const d = new Date();
+  // Grace period: if today has nothing logged yet, don't zero the streak mid-day.
+  if (loadDay(d).length === 0) d.setDate(d.getDate() - 1);
+  while (loadDay(d).length > 0) {
+    count++;
+    d.setDate(d.getDate() - 1);
+  }
+  return count;
+}
+
+function setRing(fillEl, circumference, pct, isOver) {
+  fillEl.style.strokeDasharray = `${circumference}`;
+  fillEl.style.strokeDashoffset = `${circumference * (1 - pct / 100)}`;
+  fillEl.classList.toggle("over", isOver);
+}
+
 // ---------- Rendering ----------
 function render() {
   document.getElementById("dateLabel").textContent = formatDateLabel(currentDate);
+  document.getElementById("streakCount").textContent = computeStreak();
 
   const meals = loadDay(currentDate);
   const targets = loadTargets();
@@ -58,13 +80,16 @@ function render() {
     { calories: 0, carbs: 0, protein: 0, fat: 0 }
   );
 
-  for (const macro of ["calories", "carbs", "protein", "fat"]) {
+  document.getElementById("val-calories").textContent = totals.calories;
+  document.getElementById("target-calories").textContent = targets.calories;
+  const calPct = targets.calories > 0 ? Math.min(100, (totals.calories / targets.calories) * 100) : 0;
+  setRing(document.getElementById("ring-calories"), RING_CIRC, calPct, totals.calories > targets.calories);
+
+  for (const macro of ["carbs", "protein", "fat"]) {
     document.getElementById("val-" + macro).textContent = totals[macro];
     document.getElementById("target-" + macro).textContent = targets[macro];
     const pct = targets[macro] > 0 ? Math.min(100, (totals[macro] / targets[macro]) * 100) : 0;
-    const fillEl = document.getElementById("meter-" + macro);
-    fillEl.style.width = pct + "%";
-    fillEl.classList.toggle("over", totals[macro] > targets[macro]);
+    setRing(document.getElementById("ring-" + macro), MRING_CIRC, pct, totals[macro] > targets[macro]);
   }
 
   const listEl = document.getElementById("mealList");
@@ -77,7 +102,7 @@ function render() {
     emptyEl.style.display = "none";
     meals.forEach((m) => {
       const li = document.createElement("li");
-      li.className = "meal-item";
+      li.className = "meal-item glass";
       li.innerHTML = `
         ${m.photo ? `<img class="meal-thumb" src="${m.photo}" alt="" />` : `<div class="meal-thumb"></div>`}
         <div class="meal-info">
@@ -96,6 +121,40 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
+
+// ---------- Sheets (bottom modals) ----------
+function openSheet(el) { el.classList.add("open"); }
+function closeSheet(el) { el.classList.remove("open"); }
+
+const addSheet = document.getElementById("addSheet");
+const settingsSheet = document.getElementById("settingsSheet");
+
+document.getElementById("fabAdd").addEventListener("click", () => openSheet(addSheet));
+document.getElementById("sheetCancel").addEventListener("click", () => closeSheet(addSheet));
+addSheet.addEventListener("click", (e) => { if (e.target === addSheet) closeSheet(addSheet); });
+
+document.getElementById("settingsBtn").addEventListener("click", () => {
+  const t = loadTargets();
+  document.getElementById("targetCaloriesInput").value = t.calories;
+  document.getElementById("targetCarbsInput").value = t.carbs;
+  document.getElementById("targetProteinInput").value = t.protein;
+  document.getElementById("targetFatInput").value = t.fat;
+  openSheet(settingsSheet);
+});
+document.getElementById("settingsCancel").addEventListener("click", () => closeSheet(settingsSheet));
+settingsSheet.addEventListener("click", (e) => { if (e.target === settingsSheet) closeSheet(settingsSheet); });
+
+document.getElementById("settingsSave").addEventListener("click", () => {
+  const targets = {
+    calories: Number(document.getElementById("targetCaloriesInput").value) || DEFAULT_TARGETS.calories,
+    carbs: Number(document.getElementById("targetCarbsInput").value) || DEFAULT_TARGETS.carbs,
+    protein: Number(document.getElementById("targetProteinInput").value) || DEFAULT_TARGETS.protein,
+    fat: Number(document.getElementById("targetFatInput").value) || DEFAULT_TARGETS.fat,
+  };
+  saveTargets(targets);
+  closeSheet(settingsSheet);
+  render();
+});
 
 // ---------- Events ----------
 document.getElementById("prevDay").addEventListener("click", () => {
@@ -141,6 +200,7 @@ document.getElementById("mealForm").addEventListener("submit", (e) => {
   e.target.reset();
   pendingPhoto = null;
   document.getElementById("photoPreview").innerHTML = "📷 Add photo";
+  closeSheet(addSheet);
 
   render();
 });
@@ -150,32 +210,6 @@ document.getElementById("mealList").addEventListener("click", (e) => {
   const id = e.target.getAttribute("data-id");
   const meals = loadDay(currentDate).filter((m) => m.id !== id);
   saveDay(currentDate, meals);
-  render();
-});
-
-// ---------- Settings modal ----------
-const modal = document.getElementById("settingsModal");
-
-document.getElementById("settingsBtn").addEventListener("click", () => {
-  const t = loadTargets();
-  document.getElementById("targetCaloriesInput").value = t.calories;
-  document.getElementById("targetCarbsInput").value = t.carbs;
-  document.getElementById("targetProteinInput").value = t.protein;
-  document.getElementById("targetFatInput").value = t.fat;
-  modal.showModal();
-});
-
-document.getElementById("settingsCancel").addEventListener("click", () => modal.close());
-
-document.getElementById("settingsSave").addEventListener("click", () => {
-  const targets = {
-    calories: Number(document.getElementById("targetCaloriesInput").value) || DEFAULT_TARGETS.calories,
-    carbs: Number(document.getElementById("targetCarbsInput").value) || DEFAULT_TARGETS.carbs,
-    protein: Number(document.getElementById("targetProteinInput").value) || DEFAULT_TARGETS.protein,
-    fat: Number(document.getElementById("targetFatInput").value) || DEFAULT_TARGETS.fat,
-  };
-  saveTargets(targets);
-  modal.close();
   render();
 });
 
