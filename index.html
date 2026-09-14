@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Macro Tracker</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body class="viz-root">
+
+  <header class="topbar">
+    <div class="topbar-row">
+      <h1>Macro Tracker</h1>
+      <button id="settingsBtn" class="icon-btn" title="Set daily targets" aria-label="Settings">⚙</button>
+    </div>
+    <div class="date-nav">
+      <button id="prevDay" class="icon-btn" aria-label="Previous day">‹</button>
+      <span id="dateLabel" class="date-label">Today</span>
+      <button id="nextDay" class="icon-btn" aria-label="Next day">›</button>
+    </div>
+  </header>
+
+  <!-- Stat tiles -->
+  <section class="tiles" id="tiles" aria-label="Daily totals">
+    <div class="tile" data-macro="calories">
+      <div class="tile-label">Calories</div>
+      <div class="tile-value"><span id="val-calories">0</span><span class="tile-target">/ <span id="target-calories">2000</span></span></div>
+      <div class="meter"><div class="meter-fill" id="meter-calories"></div></div>
+    </div>
+    <div class="tile" data-macro="carbs">
+      <div class="tile-label">Carbs</div>
+      <div class="tile-value"><span id="val-carbs">0</span><span class="tile-unit">g</span><span class="tile-target">/ <span id="target-carbs">200</span>g</span></div>
+      <div class="meter"><div class="meter-fill" id="meter-carbs"></div></div>
+    </div>
+    <div class="tile" data-macro="protein">
+      <div class="tile-label">Protein</div>
+      <div class="tile-value"><span id="val-protein">0</span><span class="tile-unit">g</span><span class="tile-target">/ <span id="target-protein">150</span>g</span></div>
+      <div class="meter"><div class="meter-fill" id="meter-protein"></div></div>
+    </div>
+    <div class="tile" data-macro="fat">
+      <div class="tile-label">Fat</div>
+      <div class="tile-value"><span id="val-fat">0</span><span class="tile-unit">g</span><span class="tile-target">/ <span id="target-fat">65</span>g</span></div>
+      <div class="meter"><div class="meter-fill" id="meter-fat"></div></div>
+    </div>
+  </section>
+
+  <!-- Add meal -->
+  <section class="add-meal">
+    <h2>Log a meal</h2>
+    <form id="mealForm">
+      <label class="photo-label" for="photoInput">
+        <div id="photoPreview" class="photo-preview">📷 Add photo</div>
+        <input type="file" id="photoInput" accept="image/*" capture="environment" hidden />
+      </label>
+
+      <input type="text" id="mealName" placeholder="Meal name (e.g. Chicken & rice)" required />
+
+      <div class="macro-inputs">
+        <div class="field">
+          <label for="mealCalories">Calories</label>
+          <input type="number" id="mealCalories" min="0" step="1" required />
+        </div>
+        <div class="field">
+          <label for="mealCarbs">Carbs (g)</label>
+          <input type="number" id="mealCarbs" min="0" step="1" required />
+        </div>
+        <div class="field">
+          <label for="mealProtein">Protein (g)</label>
+          <input type="number" id="mealProtein" min="0" step="1" required />
+        </div>
+        <div class="field">
+          <label for="mealFat">Fat (g)</label>
+          <input type="number" id="mealFat" min="0" step="1" required />
+        </div>
+      </div>
+
+      <button type="submit" class="primary-btn">Add meal</button>
+    </form>
+  </section>
+
+  <!-- Meal list -->
+  <section class="meal-list">
+    <h2>Today's meals</h2>
+    <ul id="mealList" class="meal-items"></ul>
+    <p id="emptyState" class="empty-state">No meals logged yet — add your first one above.</p>
+  </section>
+
+  <!-- Settings modal -->
+  <dialog id="settingsModal">
+    <h2>Daily targets</h2>
+    <div class="field">
+      <label for="targetCaloriesInput">Calories</label>
+      <input type="number" id="targetCaloriesInput" min="0" step="1" />
+    </div>
+    <div class="field">
+      <label for="targetCarbsInput">Carbs (g)</label>
+      <input type="number" id="targetCarbsInput" min="0" step="1" />
+    </div>
+    <div class="field">
+      <label for="targetProteinInput">Protein (g)</label>
+      <input type="number" id="targetProteinInput" min="0" step="1" />
+    </div>
+    <div class="field">
+      <label for="targetFatInput">Fat (g)</label>
+      <input type="number" id="targetFatInput" min="0" step="1" />
+    </div>
+    <div class="modal-actions">
+      <button id="settingsCancel" type="button" class="ghost-btn">Cancel</button>
+      <button id="settingsSave" type="button" class="primary-btn">Save</button>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

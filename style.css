@@ -1,0 +1,273 @@
+/* ===== Palette (light default, dark via media query + manual toggle) ===== */
+.viz-root {
+  color-scheme: light;
+  --surface-1:      #fcfcfb;
+  --page-plane:     #f9f9f7;
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #898781;
+  --gridline:       #e1e0d9;
+  --border:         rgba(11,11,11,0.10);
+
+  /* categorical slots, fixed order */
+  --series-1: #2a78d6; /* calories - blue */
+  --series-2: #eb6834; /* carbs - orange */
+  --series-3: #1baf7a; /* protein - aqua */
+  --series-4: #eda100; /* fat - yellow */
+
+  /* lighter steps for meter tracks */
+  --series-1-track: #cde2fb;
+  --series-2-track: #f8d6c4;
+  --series-3-track: #c7ecdf;
+  --series-4-track: #f8e3b8;
+
+  --status-critical: #d03b3b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page-plane:     #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --border:         rgba(255,255,255,0.10);
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+
+    --series-1-track: #184f95;
+    --series-2-track: #6b3016;
+    --series-3-track: #0f5138;
+    --series-4-track: #6b4b06;
+
+    --status-critical: #e66767;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--page-plane);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px 16px 48px;
+  min-height: 100vh;
+}
+
+h1, h2 { margin: 0; }
+h1 { font-size: 20px; font-weight: 600; }
+h2 { font-size: 15px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
+
+/* ---- Top bar ---- */
+.topbar { margin-bottom: 16px; }
+.topbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.icon-btn {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 18px;
+  width: 36px;
+  height: 36px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.date-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  min-width: 120px;
+  text-align: center;
+}
+
+/* ---- Stat tiles ---- */
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.tile {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+.tile-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.tile-value {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: proportional-nums;
+  margin-bottom: 8px;
+}
+.tile-target, .tile-unit {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+.meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--gridline);
+  overflow: hidden;
+}
+.meter-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+.tile[data-macro="calories"] .meter { background: var(--series-1-track); }
+.tile[data-macro="calories"] .meter-fill { background: var(--series-1); }
+.tile[data-macro="carbs"] .meter { background: var(--series-2-track); }
+.tile[data-macro="carbs"] .meter-fill { background: var(--series-2); }
+.tile[data-macro="protein"] .meter { background: var(--series-3-track); }
+.tile[data-macro="protein"] .meter-fill { background: var(--series-3); }
+.tile[data-macro="fat"] .meter { background: var(--series-4-track); }
+.tile[data-macro="fat"] .meter-fill { background: var(--series-4); }
+.meter-fill.over { background: var(--status-critical) !important; }
+
+/* ---- Add meal form ---- */
+.add-meal { margin-bottom: 24px; }
+#mealForm {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.photo-label { align-self: flex-start; }
+.photo-preview {
+  width: 100%;
+  min-height: 44px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  overflow: hidden;
+}
+.photo-preview img {
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+input[type="text"], input[type="number"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--page-plane);
+  color: var(--text-primary);
+  font-size: 15px;
+}
+.macro-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 12px; color: var(--text-secondary); }
+
+.primary-btn {
+  background: var(--series-1);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ghost-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+/* ---- Meal list ---- */
+.meal-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.meal-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.meal-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--gridline);
+}
+.meal-info { flex: 1; min-width: 0; }
+.meal-name { font-size: 14px; font-weight: 600; }
+.meal-macros { font-size: 12px; color: var(--text-secondary); }
+.delete-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.empty-state {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 16px 0;
+}
+
+/* ---- Settings modal ---- */
+dialog {
+  border: none;
+  border-radius: 12px;
+  padding: 20px;
+  width: min(320px, 90vw);
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+dialog::backdrop { background: rgba(0,0,0,0.4); }
+dialog .field { margin-bottom: 10px; }
+.modal-actions { display: flex; gap: 8px; margin-top: 12px; }
+.modal-actions .primary-btn, .modal-actions .ghost-btn { flex: 1; }
