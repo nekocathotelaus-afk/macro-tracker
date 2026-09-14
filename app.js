@@ -22,8 +22,8 @@ const EXERCISE_LIBRARY = {
 const CUSTOM_OPTION_VALUE = "__custom__";
 
 // Backend that holds the Gemini API key server-side (never in this public repo).
-// Set after the backend is deployed to Vercel — see api-backend/ in this project.
-const PHOTO_ANALYZE_URL = "https://macro-tracker-api.vercel.app/api/analyze-food";
+// Deployed to Vercel — see api-backend/ in this project. Verified live 2026-09-15.
+const PHOTO_ANALYZE_URL = "https://macro-tracker-api-backend1.vercel.app/api/analyze-food";
 
 const RING_R = 70, RING_CIRC = 2 * Math.PI * RING_R;
 const MRING_R = 26, MRING_CIRC = 2 * Math.PI * MRING_R;
