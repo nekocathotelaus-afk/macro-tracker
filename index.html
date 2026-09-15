@@ -25,6 +25,48 @@
       <line x1="88" y1="60" x2="66" y2="58" stroke="var(--page-plane)" stroke-width="2.5" stroke-linecap="round"/>
       <line x1="88" y1="68" x2="66" y2="64" stroke="var(--page-plane)" stroke-width="2.5" stroke-linecap="round"/>
     </symbol>
+
+    <!-- Original simple line-icons — replace every emoji in the app. All use
+         currentColor so they pick up each theme's palette automatically. -->
+    <symbol id="icon-camera" viewBox="0 0 100 100">
+      <rect x="10" y="30" width="80" height="55" rx="8" fill="none" stroke="currentColor" stroke-width="7"/>
+      <rect x="35" y="15" width="30" height="16" rx="4" fill="currentColor"/>
+      <circle cx="50" cy="58" r="17" fill="none" stroke="currentColor" stroke-width="7"/>
+    </symbol>
+    <symbol id="icon-dumbbell" viewBox="0 0 100 100">
+      <rect x="2" y="38" width="10" height="24" rx="2" fill="currentColor"/>
+      <rect x="88" y="38" width="10" height="24" rx="2" fill="currentColor"/>
+      <rect x="14" y="42" width="14" height="16" rx="3" fill="currentColor"/>
+      <rect x="72" y="42" width="14" height="16" rx="3" fill="currentColor"/>
+      <rect x="26" y="46" width="48" height="8" fill="currentColor"/>
+    </symbol>
+    <symbol id="icon-scale" viewBox="0 0 100 100">
+      <!-- Balance scale — deliberately distinct silhouette from the camera icon
+           (which is also a rect+circle) so the two aren't confusable at FAB size. -->
+      <rect x="46" y="10" width="8" height="62" fill="currentColor"/>
+      <rect x="14" y="20" width="72" height="6" rx="3" fill="currentColor"/>
+      <rect x="28" y="86" width="44" height="7" rx="3" fill="currentColor"/>
+      <path d="M12 26 L24 26 L18 46 A9 9 0 0 1 6 46 Z" fill="currentColor"/>
+      <path d="M76 26 L88 26 L82 46 A9 9 0 0 1 70 46 Z" fill="currentColor"/>
+    </symbol>
+    <symbol id="icon-flame" viewBox="0 0 100 100">
+      <path d="M50,6 C33,27 23,45 25,61 C27,80 39,93 50,93 C61,93 73,80 75,61 C77,45 67,27 50,6 Z" fill="currentColor"/>
+      <path d="M50,38 C41,50 39,60 44,69 C46,74 48,77 50,79 C52,77 54,74 56,69 C61,60 59,50 50,38 Z" fill="var(--page-plane)"/>
+    </symbol>
+    <symbol id="icon-sparkle" viewBox="0 0 100 100">
+      <path d="M50 4 L58 42 L96 50 L58 58 L50 96 L42 58 L4 50 L42 42 Z" fill="currentColor"/>
+    </symbol>
+    <symbol id="icon-arc" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="38" fill="none" stroke="currentColor" stroke-width="7"/>
+      <circle cx="50" cy="50" r="21" fill="none" stroke="currentColor" stroke-width="7"/>
+      <circle cx="50" cy="50" r="7" fill="currentColor"/>
+    </symbol>
+    <symbol id="icon-gear" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="16" fill="none" stroke="currentColor" stroke-width="8"/>
+      <path d="M50 6 L56 20 L44 20 Z M50 94 L56 80 L44 80 Z M6 50 L20 44 L20 56 Z M94 50 L80 56 L80 44 Z
+               M18 18 L30 26 L22 34 Z M82 82 L70 74 L78 66 Z M18 82 L26 70 L34 78 Z M82 18 L74 30 L66 22 Z"
+            fill="currentColor"/>
+    </symbol>
   </svg>
 
   <!-- Theme decoration — original cat icon for Mofusand, HUD readouts for Stark.
@@ -69,13 +111,13 @@
   <div id="appRoot" class="hidden">
 
   <header class="topbar">
-    <button id="settingsBtn" class="icon-btn glass" aria-label="Settings">⚙</button>
+    <button id="settingsBtn" class="icon-btn glass" aria-label="Settings"><svg class="inline-icon"><use href="#icon-gear"/></svg></button>
     <div class="date-nav">
       <button id="prevDay" class="icon-btn glass" aria-label="Previous day">‹</button>
       <span id="dateLabel" class="date-label">Today</span>
       <button id="nextDay" class="icon-btn glass" aria-label="Next day">›</button>
     </div>
-    <div class="streak glass" title="Day streak">🔥<span id="streakCount">0</span></div>
+    <div class="streak glass" title="Day streak"><svg class="inline-icon"><use href="#icon-flame"/></svg><span id="streakCount">0</span></div>
   </header>
 
   <div class="tab-switch glass">
@@ -220,7 +262,7 @@
 
   <nav class="bottom-nav glass">
     <span class="nav-hint" id="navHint">Tap to log a meal</span>
-    <button id="fabAdd" class="fab" aria-label="Add meal">📷</button>
+    <button id="fabAdd" class="fab" aria-label="Add meal"><svg class="inline-icon fab-icon"><use href="#icon-camera"/></svg></button>
   </nav>
 
   <!-- Add meal bottom sheet -->
@@ -230,7 +272,7 @@
       <h2>Log a meal</h2>
       <form id="mealForm">
         <label class="photo-label" for="photoInput">
-          <div id="photoPreview" class="photo-preview">📷 Add photo — auto-fills macros</div>
+          <div id="photoPreview" class="photo-preview"><svg class="inline-icon"><use href="#icon-camera"/></svg> Add photo — auto-fills macros</div>
           <input type="file" id="photoInput" accept="image/*" hidden />
         </label>
         <p id="analyzeStatus" class="pct-hint"></p>
@@ -316,7 +358,7 @@
       <h2>Log your weight</h2>
       <form id="weightForm">
         <label class="photo-label" for="weightPhotoInput">
-          <div id="weightPhotoPreview" class="photo-preview">📷 Add progress photo (optional)</div>
+          <div id="weightPhotoPreview" class="photo-preview"><svg class="inline-icon"><use href="#icon-camera"/></svg> Add progress photo (optional)</div>
           <input type="file" id="weightPhotoInput" accept="image/*" hidden />
         </label>
 
@@ -341,9 +383,9 @@
       <div class="sheet-handle"></div>
       <h2>Theme</h2>
       <div class="theme-picker" id="themePicker">
-        <button type="button" class="theme-swatch" data-vibe-value="classic"><span class="swatch-emoji">✨</span>Classic</button>
-        <button type="button" class="theme-swatch" data-vibe-value="stark"><span class="swatch-emoji">🔴</span>Stark</button>
-        <button type="button" class="theme-swatch" data-vibe-value="mofusand"><span class="swatch-emoji">🐱</span>Mofusand</button>
+        <button type="button" class="theme-swatch" data-vibe-value="classic"><svg class="inline-icon swatch-icon"><use href="#icon-sparkle"/></svg>Classic</button>
+        <button type="button" class="theme-swatch" data-vibe-value="stark"><svg class="inline-icon swatch-icon"><use href="#icon-arc"/></svg>Stark</button>
+        <button type="button" class="theme-swatch" data-vibe-value="mofusand"><svg class="inline-icon swatch-icon"><use href="#deco-cat"/></svg>Mofusand</button>
       </div>
 
       <h2>Daily targets</h2>

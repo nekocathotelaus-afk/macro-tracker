@@ -359,7 +359,7 @@ function renderWorkoutView() {
       li.className = "meal-item glass";
       const pctText = w.pct ? ` (${w.pct}% 1RM)` : "";
       li.innerHTML = `
-        <div class="meal-thumb workout-thumb" aria-hidden="true">🏋️</div>
+        <div class="meal-thumb workout-thumb" aria-hidden="true"><svg class="inline-icon"><use href="#icon-dumbbell"/></svg></div>
         <div class="meal-info">
           <div class="meal-name">${escapeHtml(w.exercise)}</div>
           <div class="meal-macros">${w.weight}kg${pctText} × ${w.reps} reps × ${w.sets} sets</div>
@@ -611,9 +611,9 @@ document.querySelectorAll(".period-btn").forEach((btn) => {
 
 // ---------- Tabs ----------
 const TAB_META = {
-  nutrition: { fabIcon: "📷", fabLabel: "Add meal", hint: "Tap to log a meal" },
-  workouts: { fabIcon: "🏋️", fabLabel: "Add exercise", hint: "Tap to log an exercise" },
-  weight: { fabIcon: "⚖️", fabLabel: "Add weigh-in", hint: "Tap to log your weight" },
+  nutrition: { fabIcon: '<svg class="inline-icon fab-icon"><use href="#icon-camera"/></svg>', fabLabel: "Add meal", hint: "Tap to log a meal" },
+  workouts: { fabIcon: '<svg class="inline-icon fab-icon"><use href="#icon-dumbbell"/></svg>', fabLabel: "Add exercise", hint: "Tap to log an exercise" },
+  weight: { fabIcon: '<svg class="inline-icon fab-icon"><use href="#icon-scale"/></svg>', fabLabel: "Add weigh-in", hint: "Tap to log your weight" },
   dashboard: { fabIcon: null, fabLabel: "", hint: "Nothing to log here — just trends" },
 };
 // tab key -> { view element id, tab button id } — not a simple string
@@ -635,7 +635,7 @@ function switchTab(tab) {
   const meta = TAB_META[tab];
   const fab = document.getElementById("fabAdd");
   fab.classList.toggle("hidden", !meta.fabIcon);
-  fab.textContent = meta.fabIcon || "";
+  fab.innerHTML = meta.fabIcon || "";
   fab.setAttribute("aria-label", meta.fabLabel);
   document.getElementById("navHint").textContent = meta.hint;
 
@@ -706,7 +706,7 @@ document.getElementById("weightForm").addEventListener("submit", (e) => {
 
   e.target.reset();
   pendingWeightPhoto = null;
-  document.getElementById("weightPhotoPreview").innerHTML = "📷 Add progress photo (optional)";
+  document.getElementById("weightPhotoPreview").innerHTML = '<svg class="inline-icon"><use href="#icon-camera"/></svg> Add progress photo (optional)';
   closeSheet(addWeightSheet);
   render();
 });
@@ -895,7 +895,7 @@ document.getElementById("mealForm").addEventListener("submit", (e) => {
   // reset form
   e.target.reset();
   pendingPhoto = null;
-  document.getElementById("photoPreview").innerHTML = "📷 Add photo";
+  document.getElementById("photoPreview").innerHTML = '<svg class="inline-icon"><use href="#icon-camera"/></svg> Add photo — auto-fills macros';
   closeSheet(addSheet);
 
   render();
