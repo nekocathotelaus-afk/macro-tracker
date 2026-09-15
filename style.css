@@ -233,6 +233,32 @@ h2 { font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bot
 }
 .hidden { display: none !important; }
 
+/* ---- Dashboard / Trends ---- */
+.period-switch {
+  margin: 16px 16px 0;
+  border-radius: 16px;
+  padding: 4px;
+  display: flex;
+  gap: 4px;
+}
+.period-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.period-btn.active { background: var(--series-1); color: #fff; }
+
+.bar-chart-bar { rx: 4; }
+.bar-chart-label { fill: var(--text-muted); font-size: 6px; font-family: system-ui, sans-serif; }
+.bar-chart-value { fill: var(--text-primary); font-size: 7px; font-weight: 600; font-family: system-ui, sans-serif; }
+.bar-chart-baseline { stroke: var(--border); stroke-width: 1; }
+
 /* ---- Hero card ---- */
 main { padding: 16px; display: flex; flex-direction: column; gap: 20px; }
 

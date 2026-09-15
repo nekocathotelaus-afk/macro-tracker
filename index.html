@@ -44,6 +44,7 @@
     <button id="tabNutrition" class="tab-btn active">Nutrition</button>
     <button id="tabWorkouts" class="tab-btn">Workouts</button>
     <button id="tabWeight" class="tab-btn">Weight</button>
+    <button id="tabDashboard" class="tab-btn">Trends</button>
   </div>
 
   <main>
@@ -146,6 +147,35 @@
         <h2>Weigh-ins</h2>
         <ul id="weightList" class="meal-items"></ul>
         <p id="weightEmptyState" class="empty-state">No weigh-ins logged yet — tap the button below to add one.</p>
+      </section>
+    </section>
+
+    <section id="dashboardView" class="hidden">
+      <div class="period-switch glass">
+        <button id="periodWeekly" class="period-btn active" data-period="weekly">Weekly</button>
+        <button id="periodMonthly" class="period-btn" data-period="monthly">Monthly</button>
+        <button id="periodYearly" class="period-btn" data-period="yearly">Yearly</button>
+      </div>
+
+      <section class="progression-card glass">
+        <h2>Average daily calories</h2>
+        <div id="dashCaloriesChart" class="progression-chart">
+          <p class="empty-state">Log meals across a few periods to see this.</p>
+        </div>
+      </section>
+
+      <section class="progression-card glass">
+        <h2>Average weight</h2>
+        <div id="dashWeightChart" class="progression-chart">
+          <p class="empty-state">Log your weight across a few periods to see this.</p>
+        </div>
+      </section>
+
+      <section class="progression-card glass">
+        <h2>Workout days</h2>
+        <div id="dashWorkoutsChart" class="progression-chart">
+          <p class="empty-state">Log workouts across a few periods to see this.</p>
+        </div>
       </section>
     </section>
   </main>

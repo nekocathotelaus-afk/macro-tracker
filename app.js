@@ -147,7 +147,11 @@ function saveSettings(partial) {
 }
 
 // Shared line-chart renderer — used by both exercise progression and weight trend.
-// Caller is responsible for the "not enough data yet" empty state; this assumes >=2 points.
+// Caller is responsible for the "not enough data yet" empty state (assumes
+// >=2 points) AND for providing a display-ready `label` on each point —
+// this function does no date parsing/formatting itself, so it works equally
+// for raw per-day dates (pre-formatted by the caller) and pre-aggregated
+// period labels (dashboard's "Sep 26", "Jan '26", etc).
 function drawTrendChart(chartEl, points, unit) {
   const w = 300, h = 120, pad = 18;
   const values = points.map((p) => p.value);
@@ -169,8 +173,8 @@ function drawTrendChart(chartEl, points, unit) {
       <path class="progression-line" d="${pathD}"></path>
       <circle class="progression-dot" cx="${last.x}" cy="${last.y}" r="4"></circle>
       <text class="progression-value-label" x="${last.x}" y="${Math.max(10, last.y - 8)}" text-anchor="end">${last.value}${unit}</text>
-      <text class="progression-axis-label" x="${first.x}" y="${h - 4}" text-anchor="start">${formatShortDate(first.date)}</text>
-      <text class="progression-axis-label" x="${last.x}" y="${h - 4}" text-anchor="end">${formatShortDate(last.date)}</text>
+      <text class="progression-axis-label" x="${first.x}" y="${h - 4}" text-anchor="start">${first.label}</text>
+      <text class="progression-axis-label" x="${last.x}" y="${h - 4}" text-anchor="end">${last.label}</text>
     </svg>
   `;
 }
@@ -404,7 +408,7 @@ function renderProgressionChart(exerciseName) {
   for (const { date, entries } of getAllWorkoutEntriesByDate()) {
     const matches = entries.filter((e) => e.exercise === exerciseName);
     if (matches.length === 0) continue;
-    points.push({ date, value: Math.max(...matches.map((e) => e.weight)) });
+    points.push({ label: formatShortDate(date), value: Math.max(...matches.map((e) => e.weight)) });
   }
 
   if (points.length < 2) {
@@ -466,7 +470,7 @@ function renderWeightView() {
   const maintenance = Math.round(currentWeight * activityLevel);
   document.getElementById("suggestedCalories").textContent = Math.max(0, maintenance - 200);
 
-  const points = allByDate.map(({ date, entries }) => ({ date, value: entries[entries.length - 1].weight }));
+  const points = allByDate.map(({ date, entries }) => ({ label: formatShortDate(date), value: entries[entries.length - 1].weight }));
   if (points.length < 2) {
     chartEl.innerHTML = `<p class="empty-state">Log your weight a couple more times to see a trend.</p>`;
   } else {
@@ -474,31 +478,174 @@ function renderWeightView() {
   }
 }
 
+// ---------- Dashboard (weekly/monthly/yearly trends) ----------
+let dashboardPeriod = "weekly";
+
+// Groups a YYYY-MM-DD string into a period bucket key. Weekly buckets key on
+// that week's Monday (ISO-ish, not calendar-locale-dependent); monthly on
+// YYYY-MM; yearly on YYYY.
+function bucketKeyForDate(dateStr, period) {
+  const d = new Date(dateStr + "T00:00:00");
+  if (period === "yearly") return String(d.getFullYear());
+  if (period === "monthly") return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const diffToMonday = (day === 0 ? -6 : 1) - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+  return monday.toISOString().slice(0, 10);
+}
+
+function bucketLabel(key, period) {
+  if (period === "yearly") return key;
+  if (period === "monthly") {
+    const [y, m] = key.split("-");
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+  }
+  return new Date(key + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// One pass over every loaded day, grouped into period buckets. Caps how many
+// buckets are shown (most recent N) so the chart doesn't get unreadable for
+// an account with years of history.
+function aggregateByPeriod(period) {
+  const buckets = {};
+  for (const [dateStr, day] of Object.entries(cloud.days)) {
+    const key = bucketKeyForDate(dateStr, period);
+    if (!buckets[key]) buckets[key] = { calorieSum: 0, calorieDayCount: 0, weightVals: [], workoutDayCount: 0 };
+    const b = buckets[key];
+    if (day.meals && day.meals.length) {
+      b.calorieSum += day.meals.reduce((s, m) => s + (m.calories || 0), 0);
+      b.calorieDayCount += 1;
+    }
+    if (day.weights && day.weights.length) {
+      b.weightVals.push(day.weights[day.weights.length - 1].weight);
+    }
+    if (day.workouts && day.workouts.length) {
+      b.workoutDayCount += 1;
+    }
+  }
+
+  const maxBuckets = period === "weekly" ? 8 : period === "monthly" ? 12 : 20;
+  const keys = Object.keys(buckets).sort().slice(-maxBuckets);
+
+  return keys.map((key) => {
+    const b = buckets[key];
+    return {
+      label: bucketLabel(key, period),
+      avgCalories: b.calorieDayCount ? Math.round(b.calorieSum / b.calorieDayCount) : null,
+      avgWeight: b.weightVals.length ? Math.round((b.weightVals.reduce((a, c) => a + c, 0) / b.weightVals.length) * 10) / 10 : null,
+      workoutDays: b.workoutDayCount,
+    };
+  });
+}
+
+// Simple bar chart: thin bars off a single baseline, value labeled on the
+// last bar only (dataviz guidance — never a number on every bar), category
+// labels under each bar. `points` = [{ label, value }].
+function drawBarChart(chartEl, points, unit) {
+  const w = 300, h = 130, pad = 18, baselineY = h - 24;
+  const values = points.map((p) => p.value);
+  const maxV = Math.max(...values, 1);
+  const barWidth = Math.min(24, (w - pad * 2) / points.length - 6);
+  const step = (w - pad * 2) / points.length;
+
+  const bars = points.map((p, i) => {
+    const barH = (p.value / maxV) * (baselineY - 12);
+    const x = pad + i * step + (step - barWidth) / 2;
+    const y = baselineY - barH;
+    return { ...p, x, y, barH };
+  });
+
+  const barsSvg = bars.map((b) => `
+    <rect class="bar-chart-bar" x="${b.x}" y="${b.y}" width="${barWidth}" height="${Math.max(1, b.barH)}"
+          rx="4" fill="var(--series-1)"></rect>
+    <text class="bar-chart-label" x="${b.x + barWidth / 2}" y="${h - 6}" text-anchor="middle">${b.label}</text>
+  `).join("");
+
+  const last = bars[bars.length - 1];
+
+  chartEl.innerHTML = `
+    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
+      <line class="bar-chart-baseline" x1="${pad}" y1="${baselineY}" x2="${w - pad}" y2="${baselineY}"></line>
+      ${barsSvg}
+      <text class="bar-chart-value" x="${last.x + barWidth / 2}" y="${Math.max(10, last.y - 6)}" text-anchor="middle">${last.value}${unit}</text>
+    </svg>
+  `;
+}
+
+function renderDashboard() {
+  const data = aggregateByPeriod(dashboardPeriod);
+
+  const calPoints = data.filter((d) => d.avgCalories !== null).map((d) => ({ label: d.label, value: d.avgCalories }));
+  const calEl = document.getElementById("dashCaloriesChart");
+  if (calPoints.length < 2) {
+    calEl.innerHTML = `<p class="empty-state">Log meals across a few periods to see this.</p>`;
+  } else {
+    drawBarChart(calEl, calPoints, "");
+  }
+
+  const weightPoints = data.filter((d) => d.avgWeight !== null).map((d) => ({ label: d.label, value: d.avgWeight }));
+  const weightEl = document.getElementById("dashWeightChart");
+  if (weightPoints.length < 2) {
+    weightEl.innerHTML = `<p class="empty-state">Log your weight across a few periods to see this.</p>`;
+  } else {
+    drawTrendChart(weightEl, weightPoints, "kg");
+  }
+
+  const workoutPoints = data.map((d) => ({ label: d.label, value: d.workoutDays }));
+  const workoutEl = document.getElementById("dashWorkoutsChart");
+  if (workoutPoints.filter((p) => p.value > 0).length < 2) {
+    workoutEl.innerHTML = `<p class="empty-state">Log workouts across a few periods to see this.</p>`;
+  } else {
+    drawBarChart(workoutEl, workoutPoints, "");
+  }
+}
+
+document.querySelectorAll(".period-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    dashboardPeriod = btn.dataset.period;
+    document.querySelectorAll(".period-btn").forEach((b) => b.classList.toggle("active", b === btn));
+    renderDashboard();
+  });
+});
+
 // ---------- Tabs ----------
 const TAB_META = {
   nutrition: { fabIcon: "📷", fabLabel: "Add meal", hint: "Tap to log a meal" },
   workouts: { fabIcon: "🏋️", fabLabel: "Add exercise", hint: "Tap to log an exercise" },
   weight: { fabIcon: "⚖️", fabLabel: "Add weigh-in", hint: "Tap to log your weight" },
+  dashboard: { fabIcon: null, fabLabel: "", hint: "Nothing to log here — just trends" },
+};
+// tab key -> { view element id, tab button id } — not a simple string
+// concatenation since "workouts" (tab key/button) maps to "workoutView" (singular).
+const TAB_IDS = {
+  nutrition: { view: "nutritionView", btn: "tabNutrition" },
+  workouts: { view: "workoutView", btn: "tabWorkouts" },
+  weight: { view: "weightView", btn: "tabWeight" },
+  dashboard: { view: "dashboardView", btn: "tabDashboard" },
 };
 
 function switchTab(tab) {
   activeTab = tab;
-  document.getElementById("nutritionView").classList.toggle("hidden", tab !== "nutrition");
-  document.getElementById("workoutView").classList.toggle("hidden", tab !== "workouts");
-  document.getElementById("weightView").classList.toggle("hidden", tab !== "weight");
-  document.getElementById("tabNutrition").classList.toggle("active", tab === "nutrition");
-  document.getElementById("tabWorkouts").classList.toggle("active", tab === "workouts");
-  document.getElementById("tabWeight").classList.toggle("active", tab === "weight");
+  Object.entries(TAB_IDS).forEach(([t, ids]) => {
+    document.getElementById(ids.view).classList.toggle("hidden", t !== tab);
+    document.getElementById(ids.btn).classList.toggle("active", t === tab);
+  });
 
   const meta = TAB_META[tab];
-  document.getElementById("fabAdd").textContent = meta.fabIcon;
-  document.getElementById("fabAdd").setAttribute("aria-label", meta.fabLabel);
+  const fab = document.getElementById("fabAdd");
+  fab.classList.toggle("hidden", !meta.fabIcon);
+  fab.textContent = meta.fabIcon || "";
+  fab.setAttribute("aria-label", meta.fabLabel);
   document.getElementById("navHint").textContent = meta.hint;
+
+  if (tab === "dashboard") renderDashboard();
 }
 
 document.getElementById("tabNutrition").addEventListener("click", () => switchTab("nutrition"));
 document.getElementById("tabWorkouts").addEventListener("click", () => switchTab("workouts"));
 document.getElementById("tabWeight").addEventListener("click", () => switchTab("weight"));
+document.getElementById("tabDashboard").addEventListener("click", () => switchTab("dashboard"));
 document.getElementById("exercisePicker").addEventListener("change", (e) => renderProgressionChart(e.target.value));
 document.getElementById("activityLevel").addEventListener("change", (e) => {
   saveSettings({ activityLevel: Number(e.target.value) });
