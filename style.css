@@ -39,67 +39,69 @@
 
 /* ==== Theme packs — each is a complete, fixed vibe (not light/dark-aware) ==== */
 
-/* --- Stark: dark HUD, gold/cyan/red accents, angular --- */
-[data-vibe="stark"] .app-shell {
+/* --- Stark: JARVIS HUD — dark, blue/cyan arc-reactor glow, angular --- */
+[data-vibe="stark"].app-shell {
   color-scheme: dark;
-  --page-plane:     #050507;
-  --text-primary:   #f5f6fa;
-  --text-secondary: #9aa5b1;
-  --text-muted:     #6b7280;
-  --border:         rgba(232,35,42,0.25);
-  --glass-bg:       rgba(15,17,22,0.72);
-  --glass-border:   rgba(255,184,0,0.25);
-  --track:          rgba(255,255,255,0.08);
+  --page-plane:     #04070a;
+  --text-primary:   #eaf6ff;
+  --text-secondary: #7fa8bf;
+  --text-muted:     #4d6b7a;
+  --border:         rgba(0,217,255,0.25);
+  --glass-bg:       rgba(8,16,22,0.75);
+  --glass-border:   rgba(0,217,255,0.3);
+  --track:          rgba(0,217,255,0.10);
 
-  --series-1: #ffb800; /* calories - arc gold */
-  --series-2: #00d4ff; /* carbs - arc cyan */
-  --series-3: #e8232a; /* protein - stark red */
+  --series-1: #29d1ff; /* calories - arc cyan (hero ring) */
+  --series-2: #0074e8; /* carbs - deep blue */
+  --series-3: #ffb800; /* protein - HUD amber accent */
   --series-4: #c7cdd6; /* fat - silver */
-  --status-critical: #ff3b3b;
+  --status-critical: #ff5a5a;
   font-family: "SF Mono", "Roboto Mono", Consolas, monospace;
 }
 [data-vibe="stark"] .hero-card, [data-vibe="stark"] .glass {
   border-radius: 10px;
-  box-shadow: 0 0 24px rgba(255,184,0,0.12), inset 0 0 0 1px rgba(255,184,0,0.15);
+  box-shadow: 0 0 28px rgba(0,217,255,0.15), inset 0 0 0 1px rgba(0,217,255,0.2);
 }
-[data-vibe="stark"] .fab { background: linear-gradient(145deg, #e8232a, #7a0e12); box-shadow: 0 0 30px rgba(232,35,42,0.6); }
-[data-vibe="stark"] .primary-btn, [data-vibe="stark"] .tab-btn.active { background: #e8232a; }
+[data-vibe="stark"] .ring-fill { filter: drop-shadow(0 0 8px rgba(41,209,255,0.85)); }
+[data-vibe="stark"] .mring-fill { filter: drop-shadow(0 0 5px rgba(41,209,255,0.6)); }
+[data-vibe="stark"] .fab { background: linear-gradient(145deg, #29d1ff, #0057a8); box-shadow: 0 0 32px rgba(41,209,255,0.65); }
+[data-vibe="stark"] .primary-btn, [data-vibe="stark"] .tab-btn.active { background: #0088e0; }
 [data-vibe="stark"] .bg-glow {
   background:
-    radial-gradient(38vh 38vh at 15% 8%, rgba(255,184,0,0.25), transparent 70%),
-    radial-gradient(34vh 34vh at 90% 18%, rgba(0,212,255,0.2), transparent 70%),
-    radial-gradient(40vh 40vh at 20% 85%, rgba(232,35,42,0.2), transparent 70%),
+    radial-gradient(38vh 38vh at 15% 8%, rgba(41,209,255,0.28), transparent 70%),
+    radial-gradient(34vh 34vh at 90% 18%, rgba(0,116,232,0.22), transparent 70%),
+    radial-gradient(40vh 40vh at 20% 85%, rgba(255,184,0,0.12), transparent 70%),
     radial-gradient(36vh 36vh at 95% 90%, rgba(199,205,214,0.12), transparent 70%);
 }
 
-/* --- Mofusand: pastel cartoon cat, soft and round --- */
-[data-vibe="mofusand"] .app-shell {
+/* --- Mofusand: pancake-cat illustrations — warm cream, soft and round --- */
+[data-vibe="mofusand"].app-shell {
   color-scheme: light;
-  --page-plane:     #fff3f6;
-  --text-primary:   #5b3a45;
-  --text-secondary: #a2757e;
-  --text-muted:     #c9a3ab;
-  --border:         rgba(184,110,130,0.18);
-  --glass-bg:       rgba(255,255,255,0.7);
-  --glass-border:   rgba(255,255,255,0.85);
-  --track:          rgba(184,110,130,0.12);
+  --page-plane:     #fffaf3;
+  --text-primary:   #6b4a3a;
+  --text-secondary: #a9846d;
+  --text-muted:     #cbb09c;
+  --border:         rgba(201,137,91,0.2);
+  --glass-bg:       rgba(255,255,255,0.75);
+  --glass-border:   rgba(255,255,255,0.9);
+  --track:          rgba(201,137,91,0.12);
 
-  --series-1: #ff9fb8; /* calories - pink */
-  --series-2: #ffcf7a; /* carbs - butter yellow */
-  --series-3: #8fe0c2; /* protein - mint */
-  --series-4: #b9a6e8; /* fat - lavender */
+  --series-1: #ff9baa; /* calories - donut pink */
+  --series-2: #f4c15c; /* carbs - butter gold */
+  --series-3: #c98a5b; /* protein - pancake caramel */
+  --series-4: #e8637a; /* fat - berry red */
   --status-critical: #e8637a;
 }
 [data-vibe="mofusand"] .hero-card, [data-vibe="mofusand"] .glass,
 [data-vibe="mofusand"] .sheet, [data-vibe="mofusand"] .tab-switch { border-radius: 28px; }
-[data-vibe="mofusand"] .fab { background: linear-gradient(145deg, #ff9fb8, #e87a9a); box-shadow: 0 8px 24px rgba(255,159,184,0.5); }
-[data-vibe="mofusand"] .primary-btn, [data-vibe="mofusand"] .tab-btn.active { background: #ff9fb8; color: #5b3a45; }
+[data-vibe="mofusand"] .fab { background: linear-gradient(145deg, #ff9baa, #e87a9a); box-shadow: 0 8px 24px rgba(255,155,170,0.5); }
+[data-vibe="mofusand"] .primary-btn, [data-vibe="mofusand"] .tab-btn.active { background: #ff9baa; color: #6b4a3a; }
 [data-vibe="mofusand"] .bg-glow {
   background:
-    radial-gradient(38vh 38vh at 15% 8%, rgba(255,159,184,0.35), transparent 70%),
-    radial-gradient(34vh 34vh at 90% 18%, rgba(255,207,122,0.3), transparent 70%),
-    radial-gradient(40vh 40vh at 20% 85%, rgba(143,224,194,0.3), transparent 70%),
-    radial-gradient(36vh 36vh at 95% 90%, rgba(185,166,232,0.3), transparent 70%);
+    radial-gradient(38vh 38vh at 15% 8%, rgba(255,155,170,0.3), transparent 70%),
+    radial-gradient(34vh 34vh at 90% 18%, rgba(244,193,92,0.3), transparent 70%),
+    radial-gradient(40vh 40vh at 20% 85%, rgba(201,138,91,0.22), transparent 70%),
+    radial-gradient(36vh 36vh at 95% 90%, rgba(232,99,122,0.2), transparent 70%);
 }
 
 /* --- Theme picker (Settings sheet) --- */
