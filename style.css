@@ -428,7 +428,13 @@ main { padding: 16px; display: flex; flex-direction: column; gap: 20px; }
 }
 .suggestion-label { font-size: 12px; color: var(--text-secondary); margin: 0; }
 .suggestion-value { font-size: 22px; font-weight: 700; }
-#applySuggestion { width: auto; padding: 8px 16px; font-size: 13px; }
+#applySuggestion, #applyAdaptive { width: auto; padding: 8px 16px; font-size: 13px; }
+.adaptive-box { background: color-mix(in srgb, var(--series-1) 12%, var(--track)); border: 1px solid var(--series-1); }
+.adaptive-reasoning { font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.4; }
+
+/* ---- Remaining-today summary (Nutrition hero) ---- */
+.remaining-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); text-align: center; margin: 0; }
+.remaining-label.over-budget { color: var(--status-critical); }
 
 /* ---- Progression card ---- */
 .progression-card {

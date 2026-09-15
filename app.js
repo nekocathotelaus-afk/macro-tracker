@@ -228,6 +228,7 @@ function populateExerciseSelect() {
   document.getElementById("exerciseCustomName").classList.toggle("hidden", !isCustom);
   document.getElementById("oneRepMaxInput").value = loadOneRepMaxes()[currentExerciseName()] || "";
   updatePctHint();
+  updateWeightSuggestion();
 }
 
 function currentExerciseName() {
@@ -249,6 +250,35 @@ function updatePctHint() {
   } else {
     hintEl.textContent = "";
   }
+}
+
+// Most recent logged set for this exact exercise, across every day loaded —
+// used for the progressive-overload suggestion below.
+function getLastExerciseEntry(exerciseName) {
+  const byDate = getAllWorkoutEntriesByDate(); // ascending by date already
+  for (let i = byDate.length - 1; i >= 0; i--) {
+    const matches = byDate[i].entries.filter((e) => e.exercise === exerciseName);
+    if (matches.length === 0) continue;
+    const latest = matches.slice().sort((a, b) => new Date(b.time) - new Date(a.time))[0];
+    return { ...latest, date: byDate[i].date };
+  }
+  return null;
+}
+
+// Simple progressive-overload nudge: ~2.5% up from last time, rounded to the
+// nearest 2.5kg (standard plate increment) — a suggestion to react to, not a
+// rule to follow blindly, hence "try", not "do".
+function updateWeightSuggestion() {
+  const exercise = currentExerciseName();
+  const hintEl = document.getElementById("weightSuggestionHint");
+  if (!exercise) { hintEl.textContent = ""; return; }
+
+  const last = getLastExerciseEntry(exercise);
+  if (!last) { hintEl.textContent = ""; return; }
+
+  const suggested = Math.max(2.5, Math.round((last.weight * 1.025) / 2.5) * 2.5);
+  hintEl.textContent =
+    `Last time (${formatShortDate(last.date)}): ${last.weight}kg × ${last.reps} reps × ${last.sets} sets — try ${suggested}kg today`;
 }
 
 function computeStreak() {
@@ -298,6 +328,21 @@ function render() {
     document.getElementById("target-" + macro).textContent = targets[macro];
     const pct = targets[macro] > 0 ? Math.min(100, (totals[macro] / targets[macro]) * 100) : 0;
     setRing(document.getElementById("ring-" + macro), MRING_CIRC, pct, totals[macro] > targets[macro]);
+  }
+
+  // "Nutrition to fill out the rest of my calories" — show what's actually
+  // left to hit every target today, not just calories in isolation.
+  const remainingEl = document.getElementById("remainingLabel");
+  const remCal = targets.calories - totals.calories;
+  const remCarbs = targets.carbs - totals.carbs;
+  const remProtein = targets.protein - totals.protein;
+  const remFat = targets.fat - totals.fat;
+  if (remCal >= 0) {
+    remainingEl.textContent = `${remCal} kcal left · ${Math.max(0, remProtein)}g protein · ${Math.max(0, remCarbs)}g carbs · ${Math.max(0, remFat)}g fat`;
+    remainingEl.classList.remove("over-budget");
+  } else {
+    remainingEl.textContent = `${Math.abs(remCal)} kcal over today's target`;
+    remainingEl.classList.add("over-budget");
   }
 
   const listEl = document.getElementById("mealList");
@@ -420,6 +465,57 @@ function renderProgressionChart(exerciseName) {
 }
 
 // ---------- Weight ----------
+// Compares what your CURRENT calorie target predicts your weight trend should
+// be against what it's actually doing, and suggests a correction — this is
+// the "adjust as more information presents itself" piece, distinct from the
+// one-time maintenance-minus-200 estimate above it.
+//
+// Method: ~7700 kcal per kg of body mass (standard approximation). Uses the
+// last ~21 days of weigh-ins (falls back to full history if that's too
+// sparse) so the trend reflects current habits, not the very first weigh-in
+// months ago. Needs >=5 days of spread to trust a rate at all — a single
+// day's noise (water weight, etc.) isn't a trend.
+function computeAdaptiveSuggestion(allByDate, activityLevel, currentTarget) {
+  if (allByDate.length < 2) return null;
+
+  const latestDate = new Date(allByDate[allByDate.length - 1].date + "T00:00:00");
+  const windowStart = new Date(latestDate);
+  windowStart.setDate(windowStart.getDate() - 21);
+
+  let windowed = allByDate.filter(({ date }) => new Date(date + "T00:00:00") >= windowStart);
+  if (windowed.length < 2) windowed = allByDate;
+
+  const first = windowed[0];
+  const last = windowed[windowed.length - 1];
+  const firstWeight = first.entries[0].weight;
+  const lastWeight = last.entries[last.entries.length - 1].weight;
+  const days = (new Date(last.date + "T00:00:00") - new Date(first.date + "T00:00:00")) / 86400000;
+  if (days < 5) return null;
+
+  const actualKgPerWeek = Math.round(((lastWeight - firstWeight) / days) * 7 * 100) / 100;
+  const maintenance = lastWeight * activityLevel;
+  const expectedKgPerWeek = Math.round((-((maintenance - currentTarget) * 7) / 7700) * 100) / 100;
+
+  // Positive adjustment = eat more (actual loss outrunning the target's prediction);
+  // negative = eat less (actual loss lagging what the target predicts).
+  const adjustment = Math.round((((expectedKgPerWeek - actualKgPerWeek) * 7700) / 7 / 25)) * 25;
+  const dayCount = Math.round(days);
+
+  if (Math.abs(adjustment) < 75) {
+    return {
+      onTrack: true,
+      reasoning: `Over the last ${dayCount} days you've trended ${actualKgPerWeek}kg/week — matches what ${currentTarget} kcal/day predicts (${expectedKgPerWeek}kg/week). No change needed.`,
+    };
+  }
+
+  const direction = adjustment > 0 ? "faster" : "slower";
+  return {
+    onTrack: false,
+    newTarget: Math.max(1000, currentTarget + adjustment),
+    reasoning: `Over the last ${dayCount} days you've trended ${actualKgPerWeek}kg/week vs. an expected ${expectedKgPerWeek}kg/week — changing ${direction} than ${currentTarget} kcal/day predicts.`,
+  };
+}
+
 function renderWeightView() {
   const settings = loadSettings();
   document.getElementById("activityLevel").value = settings.activityLevel;
@@ -455,6 +551,7 @@ function renderWeightView() {
     document.getElementById("currentWeightVal").textContent = "—";
     document.getElementById("startingWeightVal").textContent = "—";
     document.getElementById("suggestedCalories").textContent = "—";
+    document.getElementById("adaptiveBox").classList.add("hidden");
     chartEl.innerHTML = `<p class="empty-state">Log your weight a couple of times to see a trend.</p>`;
     return;
   }
@@ -469,6 +566,24 @@ function renderWeightView() {
   const activityLevel = Number(document.getElementById("activityLevel").value) || DEFAULT_ACTIVITY_LEVEL;
   const maintenance = Math.round(currentWeight * activityLevel);
   document.getElementById("suggestedCalories").textContent = Math.max(0, maintenance - 200);
+
+  const adaptiveBox = document.getElementById("adaptiveBox");
+  const adaptive = computeAdaptiveSuggestion(allByDate, activityLevel, loadTargets().calories);
+  if (!adaptive) {
+    adaptiveBox.classList.add("hidden");
+  } else {
+    adaptiveBox.classList.remove("hidden");
+    document.getElementById("adaptiveReasoning").textContent = adaptive.reasoning;
+    const applyBtn = document.getElementById("applyAdaptive");
+    if (adaptive.onTrack) {
+      document.getElementById("adaptiveCalories").textContent = loadTargets().calories;
+      applyBtn.classList.add("hidden");
+    } else {
+      document.getElementById("adaptiveCalories").textContent = adaptive.newTarget;
+      applyBtn.classList.remove("hidden");
+      applyBtn.dataset.value = adaptive.newTarget;
+    }
+  }
 
   const points = allByDate.map(({ date, entries }) => ({ label: formatShortDate(date), value: entries[entries.length - 1].weight }));
   if (points.length < 2) {
@@ -661,6 +776,16 @@ document.getElementById("applySuggestion").addEventListener("click", () => {
   switchTab("nutrition");
 });
 
+document.getElementById("applyAdaptive").addEventListener("click", (e) => {
+  const value = Number(e.target.dataset.value);
+  if (!value) return;
+  const targets = loadTargets();
+  targets.calories = value;
+  saveTargets(targets);
+  render();
+  switchTab("nutrition");
+});
+
 // ---------- Sheets (bottom modals) ----------
 function openSheet(el) { el.classList.add("open"); }
 function closeSheet(el) { el.classList.remove("open"); }
@@ -728,8 +853,12 @@ document.getElementById("exerciseSelect").addEventListener("change", (e) => {
   const oneRm = loadOneRepMaxes()[currentExerciseName()] || "";
   document.getElementById("oneRepMaxInput").value = oneRm;
   updatePctHint();
+  updateWeightSuggestion();
 });
-document.getElementById("exerciseCustomName").addEventListener("input", updatePctHint);
+document.getElementById("exerciseCustomName").addEventListener("input", () => {
+  updatePctHint();
+  updateWeightSuggestion();
+});
 document.getElementById("oneRepMaxInput").addEventListener("input", updatePctHint);
 document.getElementById("exerciseWeight").addEventListener("input", updatePctHint);
 

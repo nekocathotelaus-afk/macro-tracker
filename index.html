@@ -164,6 +164,8 @@
           <div class="macro-ring-label">Fat<br><span id="val-fat">0</span>/<span id="target-fat">65</span>g</div>
         </div>
       </div>
+
+      <p id="remainingLabel" class="remaining-label"></p>
     </section>
 
     <section class="meal-list">
@@ -213,6 +215,13 @@
           <p class="suggestion-label">Suggested calorie target (−200 from estimated maintenance)</p>
           <div class="suggestion-value"><span id="suggestedCalories">—</span> kcal/day</div>
           <button id="applySuggestion" class="ghost-btn" type="button">Use as my daily target</button>
+        </div>
+
+        <div id="adaptiveBox" class="suggestion-box adaptive-box hidden">
+          <p class="suggestion-label">Adjusted for your actual trend</p>
+          <p id="adaptiveReasoning" class="adaptive-reasoning"></p>
+          <div class="suggestion-value"><span id="adaptiveCalories">—</span> kcal/day</div>
+          <button id="applyAdaptive" class="ghost-btn" type="button">Use this instead</button>
         </div>
       </section>
 
@@ -319,6 +328,7 @@
           <select id="exerciseSelect" required></select>
         </div>
         <input type="text" id="exerciseCustomName" class="hidden" placeholder="Type the exercise name" />
+        <p id="weightSuggestionHint" class="pct-hint"></p>
 
         <div class="field">
           <label for="oneRepMaxInput">Your 1-rep max for this exercise (kg, optional)</label>
