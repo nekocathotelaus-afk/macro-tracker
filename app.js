@@ -550,6 +550,26 @@ function renderWeightView() {
   const settings = loadSettings();
   document.getElementById("activityLevel").value = settings.activityLevel;
 
+  // Doesn't depend on any weight data existing — must run before the
+  // "no weigh-ins yet" early return below, or someone with step history but
+  // no weigh-ins logged yet would never see it.
+  const stepsBox = document.getElementById("stepsInsightBox");
+  const stepsInsight = computeStepBasedActivityLevel();
+  if (!stepsInsight) {
+    stepsBox.classList.add("hidden");
+  } else {
+    stepsBox.classList.remove("hidden");
+    const levelName = stepsInsight.level === 22 ? "Sedentary" : stepsInsight.level === 24 ? "Moderately active" : "Very active";
+    const bumpNote = stepsInsight.bumped
+      ? ` — bumped up from steps alone since you've logged ${stepsInsight.workoutDaysInWindow} workout days in that window (steps alone miss lifting).`
+      : "";
+    document.getElementById("stepsInsightReasoning").textContent =
+      `Avg ${stepsInsight.avgDaily.toLocaleString()} steps/day over your last ${stepsInsight.weeksUsed} weeks of history → "${levelName}"${bumpNote}`;
+    const applyStepsBtn = document.getElementById("applyStepsLevel");
+    applyStepsBtn.dataset.value = stepsInsight.level;
+    applyStepsBtn.classList.toggle("hidden", stepsInsight.level === settings.activityLevel);
+  }
+
   const todaysEntries = loadWeightDay(currentDate);
   const listEl = document.getElementById("weightList");
   const emptyEl = document.getElementById("weightEmptyState");
@@ -597,21 +617,11 @@ function renderWeightView() {
   const maintenance = Math.round(currentWeight * activityLevel);
   document.getElementById("suggestedCalories").textContent = Math.max(0, maintenance - 200);
 
-  const stepsBox = document.getElementById("stepsInsightBox");
-  const stepsInsight = computeStepBasedActivityLevel();
-  if (!stepsInsight) {
-    stepsBox.classList.add("hidden");
-  } else {
-    stepsBox.classList.remove("hidden");
-    const levelName = stepsInsight.level === 22 ? "Sedentary" : stepsInsight.level === 24 ? "Moderately active" : "Very active";
-    const bumpNote = stepsInsight.bumped
-      ? ` — bumped up from steps alone since you've logged ${stepsInsight.workoutDaysInWindow} workout days in that window (steps alone miss lifting).`
-      : "";
-    document.getElementById("stepsInsightReasoning").textContent =
-      `Avg ${stepsInsight.avgDaily.toLocaleString()} steps/day over your last ${stepsInsight.weeksUsed} weeks of history → "${levelName}"${bumpNote}`;
-    const applyStepsBtn = document.getElementById("applyStepsLevel");
-    applyStepsBtn.dataset.value = stepsInsight.level;
-    applyStepsBtn.classList.toggle("hidden", stepsInsight.level === activityLevel);
+  // Re-evaluate the apply button's visibility now that we know the actual
+  // numeric activityLevel in effect (the block above ran before the dropdown
+  // necessarily reflected saved settings in every edge case).
+  if (stepsInsight) {
+    document.getElementById("applyStepsLevel").classList.toggle("hidden", stepsInsight.level === activityLevel);
   }
 
   const adaptiveBox = document.getElementById("adaptiveBox");
