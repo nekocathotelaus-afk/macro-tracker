@@ -73,6 +73,15 @@
     radial-gradient(40vh 40vh at 20% 85%, rgba(255,184,0,0.12), transparent 70%),
     radial-gradient(36vh 36vh at 95% 90%, rgba(199,205,214,0.12), transparent 70%);
 }
+/* Faint circuit-board grid — the "techie stuff" behind everything */
+[data-vibe="stark"] .bg-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(41,209,255,0.07) 0px, rgba(41,209,255,0.07) 1px, transparent 1px, transparent 42px),
+    repeating-linear-gradient(90deg, rgba(41,209,255,0.07) 0px, rgba(41,209,255,0.07) 1px, transparent 1px, transparent 42px);
+}
 
 /* --- Mofusand: pancake-cat illustrations — warm cream, soft and round --- */
 [data-vibe="mofusand"].app-shell {
@@ -157,6 +166,27 @@ h2 { font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bot
     radial-gradient(40vh 40vh at 20% 85%, color-mix(in srgb, var(--series-3) 28%, transparent), transparent 70%),
     radial-gradient(36vh 36vh at 95% 90%, color-mix(in srgb, var(--series-2) 25%, transparent), transparent 70%);
   filter: blur(10px);
+}
+
+/* Theme decoration layer — both sets always in the DOM, CSS shows only the
+   active theme's set (kept out of .bg-glow since that layer is blurred). */
+.bg-decor {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.deco { position: absolute; display: none; }
+[data-vibe="mofusand"] .deco-mofusand { display: block; opacity: 0.22; }
+[data-vibe="stark"] .deco-stark {
+  display: block;
+  opacity: 0.4;
+  font-family: "SF Mono", "Roboto Mono", Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #29d1ff;
+  text-shadow: 0 0 6px rgba(41,209,255,0.6);
 }
 
 /* ---- Glass surface ---- */

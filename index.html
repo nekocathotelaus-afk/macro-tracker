@@ -10,6 +10,27 @@
 
   <div class="bg-glow" aria-hidden="true"></div>
 
+  <!-- Theme decoration — cat emoji for Mofusand, HUD readouts for Stark.
+       Both sets always in the DOM; CSS shows only the active theme's set. -->
+  <div class="bg-decor" aria-hidden="true">
+    <span class="deco deco-mofusand" style="top:6%; left:8%; font-size:26px;">🐱</span>
+    <span class="deco deco-mofusand" style="top:16%; right:10%; font-size:22px;">🐾</span>
+    <span class="deco deco-mofusand" style="top:38%; left:4%; font-size:20px;">🐟</span>
+    <span class="deco deco-mofusand" style="top:52%; right:6%; font-size:24px;">🐱</span>
+    <span class="deco deco-mofusand" style="top:68%; left:12%; font-size:20px;">🐾</span>
+    <span class="deco deco-mofusand" style="top:80%; right:16%; font-size:22px;">🐟</span>
+    <span class="deco deco-mofusand" style="top:92%; left:20%; font-size:24px;">🐱</span>
+
+    <span class="deco deco-stark" style="top:8%; left:6%;">01001010</span>
+    <span class="deco deco-stark" style="top:14%; right:8%;">SYS.OK</span>
+    <span class="deco deco-stark" style="top:30%; left:10%;">◈ ARC-01</span>
+    <span class="deco deco-stark" style="top:44%; right:5%;">42.7%</span>
+    <span class="deco deco-stark" style="top:58%; left:6%;">▲▲▼ 110101</span>
+    <span class="deco deco-stark" style="top:70%; right:10%;">PWR·NOM</span>
+    <span class="deco deco-stark" style="top:84%; left:14%;">◇ SCAN_OK</span>
+    <span class="deco deco-stark" style="top:94%; right:14%;">00110101</span>
+  </div>
+
   <!-- Login gate: name + passcode only, no real security (by design — see CLAUDE.md).
        Shown until a profile is picked; hides to reveal the app underneath. -->
   <div id="authGate" class="auth-gate">
