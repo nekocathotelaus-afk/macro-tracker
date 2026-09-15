@@ -1044,12 +1044,47 @@ document.getElementById("workoutList").addEventListener("click", (e) => {
   render();
 });
 
+// Per-field sane ceilings for daily targets — a typo like an extra couple
+// zeros (e.g. "10000000" instead of "100") previously saved straight through
+// with no check at all, and quietly wrecked the remaining-macros math
+// ("999995g carbs" left) and the ring percentages. `max` attributes in the
+// HTML only affect form validation, not what you can actually type into a
+// number field, so this clamps for real on every keystroke.
+const TARGET_LIMITS = { targetCaloriesInput: 6000, targetCarbsInput: 800, targetProteinInput: 500, targetFatInput: 300 };
+function clampTargetField(id) {
+  const el = document.getElementById(id);
+  const max = TARGET_LIMITS[id];
+  if (Number(el.value) > max) el.value = max;
+  updateTargetMathHint();
+}
+Object.keys(TARGET_LIMITS).forEach((id) => {
+  document.getElementById(id).addEventListener("input", () => clampTargetField(id));
+});
+
+// Calories and macro targets are intentionally independent (the weight-tab
+// suggestions and adaptive-calorie feature set Calories on its own, without
+// touching macro targets) — so this is informational only, not enforced,
+// unlike the per-meal Calories field which IS strictly derived. Kevin asked
+// twice now for "the macro and calorie maths to make sense" — this makes any
+// big mismatch visible without breaking the independent-target design.
+function updateTargetMathHint() {
+  const carbs = Number(document.getElementById("targetCarbsInput").value) || 0;
+  const protein = Number(document.getElementById("targetProteinInput").value) || 0;
+  const fat = Number(document.getElementById("targetFatInput").value) || 0;
+  const calories = Number(document.getElementById("targetCaloriesInput").value) || 0;
+  const impliedCalories = Math.round(carbs * 4 + protein * 4 + fat * 9);
+  const hintEl = document.getElementById("targetMathHint");
+  const diff = Math.abs(impliedCalories - calories);
+  hintEl.textContent = `These macros add up to ≈${impliedCalories} kcal (your calorie target is ${calories}${diff > 150 ? " — worth double-checking, that's a big gap" : ""}).`;
+}
+
 document.getElementById("settingsBtn").addEventListener("click", () => {
   const t = loadTargets();
   document.getElementById("targetCaloriesInput").value = t.calories;
   document.getElementById("targetCarbsInput").value = t.carbs;
   document.getElementById("targetProteinInput").value = t.protein;
   document.getElementById("targetFatInput").value = t.fat;
+  updateTargetMathHint();
   document.getElementById("loggedInAsName").textContent =
     localStorage.getItem(CURRENT_PROFILE_DISPLAY_KEY) || "(unknown)";
   openSheet(settingsSheet);
@@ -1059,10 +1094,12 @@ settingsSheet.addEventListener("click", (e) => { if (e.target === settingsSheet)
 
 document.getElementById("settingsSave").addEventListener("click", () => {
   const targets = {
-    calories: Number(document.getElementById("targetCaloriesInput").value) || DEFAULT_TARGETS.calories,
-    carbs: Number(document.getElementById("targetCarbsInput").value) || DEFAULT_TARGETS.carbs,
-    protein: Number(document.getElementById("targetProteinInput").value) || DEFAULT_TARGETS.protein,
-    fat: Number(document.getElementById("targetFatInput").value) || DEFAULT_TARGETS.fat,
+    // Clamp again at save time as a hard backstop, not just on input — belt
+    // and braces against any way a bad value could reach here.
+    calories: Math.min(TARGET_LIMITS.targetCaloriesInput, Number(document.getElementById("targetCaloriesInput").value) || DEFAULT_TARGETS.calories),
+    carbs: Math.min(TARGET_LIMITS.targetCarbsInput, Number(document.getElementById("targetCarbsInput").value) || DEFAULT_TARGETS.carbs),
+    protein: Math.min(TARGET_LIMITS.targetProteinInput, Number(document.getElementById("targetProteinInput").value) || DEFAULT_TARGETS.protein),
+    fat: Math.min(TARGET_LIMITS.targetFatInput, Number(document.getElementById("targetFatInput").value) || DEFAULT_TARGETS.fat),
   };
   saveTargets(targets);
   closeSheet(settingsSheet);
