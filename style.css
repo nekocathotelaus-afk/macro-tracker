@@ -454,6 +454,8 @@ main { padding: 16px; display: flex; flex-direction: column; gap: 20px; }
 /* ---- Remaining-today summary (Nutrition hero) ---- */
 .remaining-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); text-align: center; margin: 0; }
 .remaining-label.over-budget { color: var(--status-critical); }
+.field-hint.error { color: var(--status-critical); font-weight: 600; }
+.primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ---- Progression card ---- */
 .progression-card {

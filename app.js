@@ -1061,19 +1061,30 @@ const TARGET_LIMITS = { targetCaloriesInput: 6000, targetCarbsInput: 800, target
 // per-meal fix (there, real food's calories ARE fixed by its macros, so
 // Calories was the derived field); here, the calorie TARGET is the fixed
 // thing and Carbs bends to fit it.
+// Returns false (and blocks Save — see below) if Protein+Fat alone already
+// exceed the Calories target, meaning there's no valid non-negative Carbs
+// value that makes the macros add up. Kevin asked explicitly not to allow
+// saving in that state rather than silently zeroing Carbs and letting it
+// through, which is what the previous version did.
+let targetsMathValid = true;
 function recalcTargetCarbs() {
   const calories = Number(document.getElementById("targetCaloriesInput").value) || 0;
   const protein = Number(document.getElementById("targetProteinInput").value) || 0;
   const fat = Number(document.getElementById("targetFatInput").value) || 0;
   const carbs = Math.round((calories - protein * 4 - fat * 9) / 4);
   const hintEl = document.getElementById("targetMathHint");
-  if (carbs < 0) {
+  const saveBtn = document.getElementById("settingsSave");
+  targetsMathValid = carbs >= 0;
+  if (!targetsMathValid) {
     document.getElementById("targetCarbsInput").value = 0;
-    hintEl.textContent = `Protein + fat alone already add up to more than ${calories} kcal — raise the calorie target or lower protein/fat.`;
+    hintEl.textContent = `Can't save — protein + fat alone already add up to more than ${calories} kcal. Raise the calorie target or lower protein/fat.`;
+    hintEl.classList.add("error");
   } else {
     document.getElementById("targetCarbsInput").value = Math.min(TARGET_LIMITS.targetCarbsInput, carbs);
     hintEl.textContent = `Carbs set to ${document.getElementById("targetCarbsInput").value}g so protein + fat + carbs add up to your ${calories} kcal target.`;
+    hintEl.classList.remove("error");
   }
+  saveBtn.disabled = !targetsMathValid;
 }
 ["targetCaloriesInput", "targetProteinInput", "targetFatInput"].forEach((id) => {
   document.getElementById(id).addEventListener("input", () => {
@@ -1102,6 +1113,7 @@ settingsSheet.addEventListener("click", (e) => { if (e.target === settingsSheet)
 
 document.getElementById("settingsSave").addEventListener("click", () => {
   recalcTargetCarbs(); // final recompute as a backstop before saving
+  if (!targetsMathValid) return; // hard block — button being disabled shouldn't be the only thing stopping this
   const targets = {
     calories: Math.min(TARGET_LIMITS.targetCaloriesInput, Number(document.getElementById("targetCaloriesInput").value) || DEFAULT_TARGETS.calories),
     protein: Math.min(TARGET_LIMITS.targetProteinInput, Number(document.getElementById("targetProteinInput").value) || DEFAULT_TARGETS.protein),
