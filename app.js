@@ -1,14 +1,16 @@
-// ===== Macro Tracker — Phase 1 MVP (Bite-style: rings + camera-first FAB) =====
-// All data lives in localStorage on this device/browser. Nothing is sent anywhere.
+// ===== Macro Tracker — Phase 6B: per-account cloud data (Firestore) =====
+// Data (meals/workouts/weight/targets/1RMs) lives in Firestore under the logged-in
+// profile — profiles/{profileKey}, with a days/{YYYY-MM-DD} subcollection. Loaded
+// into an in-memory cache (`cloud`) on login; writes update the cache immediately
+// (so the UI stays instant/synchronous like before) and push to Firestore in the
+// background. See CLAUDE.md "Phase 6 — Accounts" for the full design writeup.
 
-const STORAGE_KEY_PREFIX = "macro-tracker-day-"; // + YYYY-MM-DD
-const WORKOUT_KEY_PREFIX = "macro-tracker-workout-day-"; // + YYYY-MM-DD
-const WEIGHT_KEY_PREFIX = "macro-tracker-weight-day-"; // + YYYY-MM-DD
-const TARGETS_KEY = "macro-tracker-targets";
-const ONE_RM_KEY = "macro-tracker-one-rm"; // { [exerciseName]: kg }
-const PROFILE_KEY = "macro-tracker-profile"; // { activityLevel }
 const DEFAULT_TARGETS = { calories: 2000, carbs: 200, protein: 150, fat: 65 };
-const DEFAULT_PROFILE = { activityLevel: 24 };
+const DEFAULT_ACTIVITY_LEVEL = 24;
+
+// In-memory mirror of the logged-in profile's Firestore data.
+let cloud = { targets: { ...DEFAULT_TARGETS }, activityLevel: DEFAULT_ACTIVITY_LEVEL, oneRepMaxes: {}, days: {} };
+let profileDocRef = null;
 
 const EXERCISE_LIBRARY = {
   Chest: ["Bench Press", "Incline Bench Press", "Dumbbell Press", "Push-up", "Chest Fly"],
@@ -47,46 +49,49 @@ function formatDateLabel(d) {
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
-function loadDay(d) {
-  const raw = localStorage.getItem(STORAGE_KEY_PREFIX + dateKey(d));
-  return raw ? JSON.parse(raw) : [];
+// Read-only peek at a day's bucket — never creates an entry, so scanning
+// backward (e.g. computeStreak) doesn't bloat `cloud.days` with empties.
+function peekDayBucket(d) {
+  return cloud.days[dateKey(d)] || { meals: [], workouts: [], weights: [] };
 }
 
+// Pushes one day's bucket to Firestore in the background. Not awaited by
+// callers — the in-memory `cloud` update already happened synchronously, so
+// the UI is instant; this just syncs. Errors are logged, not surfaced (a
+// dropped sync on a flaky connection shouldn't block using the app).
+function persistDay(key) {
+  if (!profileDocRef) return;
+  profileDocRef.collection("days").doc(key).set(cloud.days[key])
+    .catch((err) => console.error("Failed to sync day " + key, err));
+}
+
+function loadDay(d) { return peekDayBucket(d).meals; }
 function saveDay(d, meals) {
-  localStorage.setItem(STORAGE_KEY_PREFIX + dateKey(d), JSON.stringify(meals));
+  const key = dateKey(d);
+  cloud.days[key] = { ...peekDayBucket(d), meals };
+  persistDay(key);
 }
 
-function loadTargets() {
-  const raw = localStorage.getItem(TARGETS_KEY);
-  return raw ? JSON.parse(raw) : { ...DEFAULT_TARGETS };
-}
-
+function loadTargets() { return cloud.targets; }
 function saveTargets(targets) {
-  localStorage.setItem(TARGETS_KEY, JSON.stringify(targets));
+  cloud.targets = targets;
+  if (profileDocRef) profileDocRef.update({ targets }).catch((err) => console.error("Failed to sync targets", err));
 }
 
-function loadWorkoutDay(d) {
-  const raw = localStorage.getItem(WORKOUT_KEY_PREFIX + dateKey(d));
-  return raw ? JSON.parse(raw) : [];
-}
-
+function loadWorkoutDay(d) { return peekDayBucket(d).workouts; }
 function saveWorkoutDay(d, entries) {
-  localStorage.setItem(WORKOUT_KEY_PREFIX + dateKey(d), JSON.stringify(entries));
+  const key = dateKey(d);
+  cloud.days[key] = { ...peekDayBucket(d), workouts: entries };
+  persistDay(key);
 }
 
-// Scans every stored workout day (across all dates) — needed for progression,
+// Scans every day bucket in the in-memory cache — needed for progression,
 // which is inherently cross-date, unlike the daily nutrition totals.
 function getAllWorkoutEntriesByDate() {
-  const byDate = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key || !key.startsWith(WORKOUT_KEY_PREFIX)) continue;
-    const date = key.slice(WORKOUT_KEY_PREFIX.length);
-    const entries = JSON.parse(localStorage.getItem(key) || "[]");
-    if (entries.length) byDate.push({ date, entries });
-  }
-  byDate.sort((a, b) => (a.date < b.date ? -1 : 1));
-  return byDate;
+  return Object.entries(cloud.days)
+    .filter(([, bucket]) => bucket.workouts && bucket.workouts.length)
+    .map(([date, bucket]) => ({ date, entries: bucket.workouts }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
 function getAllExerciseNames() {
@@ -97,47 +102,34 @@ function getAllExerciseNames() {
   return Array.from(names).sort((a, b) => a.localeCompare(b));
 }
 
-function loadOneRepMaxes() {
-  const raw = localStorage.getItem(ONE_RM_KEY);
-  return raw ? JSON.parse(raw) : {};
-}
-
+function loadOneRepMaxes() { return cloud.oneRepMaxes; }
 function saveOneRepMax(exercise, kg) {
-  const all = loadOneRepMaxes();
-  if (kg > 0) all[exercise] = kg;
-  localStorage.setItem(ONE_RM_KEY, JSON.stringify(all));
+  if (kg <= 0) return;
+  cloud.oneRepMaxes[exercise] = kg;
+  if (profileDocRef) {
+    profileDocRef.update({ oneRepMaxes: cloud.oneRepMaxes }).catch((err) => console.error("Failed to sync 1RM", err));
+  }
 }
 
-function loadWeightDay(d) {
-  const raw = localStorage.getItem(WEIGHT_KEY_PREFIX + dateKey(d));
-  return raw ? JSON.parse(raw) : [];
-}
-
+function loadWeightDay(d) { return peekDayBucket(d).weights; }
 function saveWeightDay(d, entries) {
-  localStorage.setItem(WEIGHT_KEY_PREFIX + dateKey(d), JSON.stringify(entries));
+  const key = dateKey(d);
+  cloud.days[key] = { ...peekDayBucket(d), weights: entries };
+  persistDay(key);
 }
 
 // Cross-date, like getAllWorkoutEntriesByDate — weight trend needs every day, not just "today".
 function getAllWeightEntriesByDate() {
-  const byDate = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key || !key.startsWith(WEIGHT_KEY_PREFIX)) continue;
-    const date = key.slice(WEIGHT_KEY_PREFIX.length);
-    const entries = JSON.parse(localStorage.getItem(key) || "[]");
-    if (entries.length) byDate.push({ date, entries });
-  }
-  byDate.sort((a, b) => (a.date < b.date ? -1 : 1));
-  return byDate;
+  return Object.entries(cloud.days)
+    .filter(([, bucket]) => bucket.weights && bucket.weights.length)
+    .map(([date, bucket]) => ({ date, entries: bucket.weights }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
-function loadProfile() {
-  const raw = localStorage.getItem(PROFILE_KEY);
-  return raw ? { ...DEFAULT_PROFILE, ...JSON.parse(raw) } : { ...DEFAULT_PROFILE };
-}
-
-function saveProfile(partial) {
-  localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...loadProfile(), ...partial }));
+function loadSettings() { return { activityLevel: cloud.activityLevel }; }
+function saveSettings(partial) {
+  Object.assign(cloud, partial);
+  if (profileDocRef) profileDocRef.update(partial).catch((err) => console.error("Failed to sync settings", err));
 }
 
 // Shared line-chart renderer — used by both exercise progression and weight trend.
@@ -405,8 +397,8 @@ function renderProgressionChart(exerciseName) {
 
 // ---------- Weight ----------
 function renderWeightView() {
-  const profile = loadProfile();
-  document.getElementById("activityLevel").value = profile.activityLevel;
+  const settings = loadSettings();
+  document.getElementById("activityLevel").value = settings.activityLevel;
 
   const todaysEntries = loadWeightDay(currentDate);
   const listEl = document.getElementById("weightList");
@@ -449,7 +441,7 @@ function renderWeightView() {
   document.getElementById("currentWeightVal").textContent = currentWeight;
   document.getElementById("startingWeightVal").textContent = startingWeight;
 
-  const activityLevel = Number(document.getElementById("activityLevel").value) || DEFAULT_PROFILE.activityLevel;
+  const activityLevel = Number(document.getElementById("activityLevel").value) || DEFAULT_ACTIVITY_LEVEL;
   const maintenance = Math.round(currentWeight * activityLevel);
   document.getElementById("suggestedCalories").textContent = Math.max(0, maintenance - 200);
 
@@ -488,7 +480,7 @@ document.getElementById("tabWorkouts").addEventListener("click", () => switchTab
 document.getElementById("tabWeight").addEventListener("click", () => switchTab("weight"));
 document.getElementById("exercisePicker").addEventListener("change", (e) => renderProgressionChart(e.target.value));
 document.getElementById("activityLevel").addEventListener("change", (e) => {
-  saveProfile({ activityLevel: Number(e.target.value) });
+  saveSettings({ activityLevel: Number(e.target.value) });
   renderWeightView();
 });
 document.getElementById("applySuggestion").addEventListener("click", () => {
@@ -746,10 +738,10 @@ document.getElementById("mealList").addEventListener("click", (e) => {
   render();
 });
 
-// ---------- Auth gate (Phase A: name + passcode only, no real security) ----------
-// Data (meals/workouts/weight) still lives in localStorage for now, shared by
-// whoever's logged in on this browser — per-profile data storage is Phase B,
-// not built yet. This phase only proves login/signup works against Firestore.
+// ---------- Auth gate (Phase B: name + passcode, data now lives per-account) ----------
+// No real security by design (see CLAUDE.md) — the passcode gates
+// creating/switching profiles, not routine access (login persists via
+// localStorage so it's not re-entered every visit).
 const CURRENT_PROFILE_KEY = "macro-tracker-current-profile";
 const CURRENT_PROFILE_DISPLAY_KEY = "macro-tracker-current-profile-display";
 
@@ -763,10 +755,47 @@ function showApp() {
   render();
 }
 
-function completeLogin(key, displayName) {
-  localStorage.setItem(CURRENT_PROFILE_KEY, key);
-  localStorage.setItem(CURRENT_PROFILE_DISPLAY_KEY, displayName);
-  showApp();
+function setAuthBusy(busy) {
+  document.getElementById("authLoading").classList.toggle("hidden", !busy);
+  document.getElementById("authLoginBtn").disabled = busy;
+  document.getElementById("authSignupBtn").disabled = busy;
+}
+
+// Pulls this profile's targets/activityLevel/1RMs/days into the in-memory
+// `cloud` cache and points profileDocRef at their Firestore doc for future
+// writes. Everything else (render, save*, load*) reads/writes `cloud` and
+// assumes this has already run.
+async function loadCloudData(key) {
+  profileDocRef = db.collection("profiles").doc(key);
+  const doc = await profileDocRef.get();
+  const data = doc.data() || {};
+
+  cloud.targets = data.targets || { ...DEFAULT_TARGETS };
+  cloud.activityLevel = data.activityLevel || DEFAULT_ACTIVITY_LEVEL;
+  cloud.oneRepMaxes = data.oneRepMaxes || {};
+  cloud.days = {};
+
+  const daysSnap = await profileDocRef.collection("days").get();
+  daysSnap.forEach((d) => {
+    cloud.days[d.id] = { meals: [], workouts: [], weights: [], ...d.data() };
+  });
+}
+
+// Shared by login and signup: fetch this profile's cloud data, remember it
+// on this browser, then reveal the app. On failure, leaves the gate up with
+// an error rather than entering a broken/empty state.
+async function enterApp(key, displayName) {
+  setAuthBusy(true);
+  try {
+    await loadCloudData(key);
+    localStorage.setItem(CURRENT_PROFILE_KEY, key);
+    localStorage.setItem(CURRENT_PROFILE_DISPLAY_KEY, displayName);
+    showApp();
+  } catch (err) {
+    document.getElementById("authError").textContent = "Couldn't load your data — check your connection and try again.";
+    console.error(err);
+    setAuthBusy(false);
+  }
 }
 
 async function attemptSignup() {
@@ -788,8 +817,15 @@ async function attemptSignup() {
       errorEl.textContent = "That name is taken — log in instead, or pick another name.";
       return;
     }
-    await docRef.set({ displayName: rawName.trim(), passcode, createdAt: new Date().toISOString() });
-    completeLogin(key, rawName.trim());
+    await docRef.set({
+      displayName: rawName.trim(),
+      passcode,
+      createdAt: new Date().toISOString(),
+      targets: { ...DEFAULT_TARGETS },
+      activityLevel: DEFAULT_ACTIVITY_LEVEL,
+      oneRepMaxes: {},
+    });
+    await enterApp(key, rawName.trim());
   } catch (err) {
     errorEl.textContent = "Couldn't reach the server — try again.";
     console.error(err);
@@ -819,7 +855,7 @@ async function attemptLogin() {
       errorEl.textContent = "Wrong passcode.";
       return;
     }
-    completeLogin(key, doc.data().displayName || rawName.trim());
+    await enterApp(key, doc.data().displayName || rawName.trim());
   } catch (err) {
     errorEl.textContent = "Couldn't reach the server — try again.";
     console.error(err);
@@ -836,9 +872,23 @@ document.getElementById("logoutBtn").addEventListener("click", () => {
 });
 
 // ---------- Init ----------
-// Auto-login if a profile was remembered on this browser (intentional — this
-// phase has no real security, so re-typing the passcode every visit isn't the
-// point; the passcode gate matters for *creating*/*switching* profiles).
-if (localStorage.getItem(CURRENT_PROFILE_KEY)) {
-  showApp();
-}
+// Auto-login if a profile was remembered on this browser — still has to
+// fetch cloud data fresh (the point of Phase B), just skips re-entering the
+// passcode. On failure, clears the stale remembered login and shows the gate
+// instead of getting stuck.
+(function initAuth() {
+  const rememberedKey = localStorage.getItem(CURRENT_PROFILE_KEY);
+  const rememberedDisplay = localStorage.getItem(CURRENT_PROFILE_DISPLAY_KEY);
+  if (!rememberedKey) return;
+
+  setAuthBusy(true);
+  loadCloudData(rememberedKey)
+    .then(() => showApp())
+    .catch((err) => {
+      console.error("Auto-login failed", err);
+      localStorage.removeItem(CURRENT_PROFILE_KEY);
+      localStorage.removeItem(CURRENT_PROFILE_DISPLAY_KEY);
+      document.getElementById("authError").textContent = "Couldn't restore your session — log in again.";
+      setAuthBusy(false);
+    });
+})();
