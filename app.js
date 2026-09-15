@@ -9,7 +9,7 @@ const DEFAULT_TARGETS = { calories: 2000, carbs: 200, protein: 150, fat: 65 };
 const DEFAULT_ACTIVITY_LEVEL = 24;
 
 // In-memory mirror of the logged-in profile's Firestore data.
-let cloud = { targets: { ...DEFAULT_TARGETS }, activityLevel: DEFAULT_ACTIVITY_LEVEL, oneRepMaxes: {}, theme: "classic", days: {} };
+let cloud = { targets: { ...DEFAULT_TARGETS }, activityLevel: DEFAULT_ACTIVITY_LEVEL, oneRepMaxes: {}, theme: "classic", weeklySteps: {}, days: {} };
 let profileDocRef = null;
 
 function applyTheme() {
@@ -516,6 +516,36 @@ function computeAdaptiveSuggestion(allByDate, activityLevel, currentTarget) {
   };
 }
 
+// Turns imported weekly step totals into an activity-level suggestion for the
+// same weight×multiplier maintenance formula used above — real behavior data
+// instead of a guessed dropdown pick. Steps alone under-count anyone who
+// trains (lifting racks up very few steps but real expenditure), so this
+// cross-checks against actual logged workout days in the same window and
+// bumps one tier if he's training regularly but steps alone would read
+// "sedentary" — otherwise the suggestion would quietly punish him for lifting.
+function computeStepBasedActivityLevel() {
+  const weekKeys = Object.keys(cloud.weeklySteps || {}).sort();
+  if (weekKeys.length < 2) return null;
+
+  const recentWeeks = weekKeys.slice(-8);
+  const avgWeekly = recentWeeks.reduce((sum, k) => sum + cloud.weeklySteps[k], 0) / recentWeeks.length;
+  const avgDaily = Math.round(avgWeekly / 7);
+
+  let level = avgDaily < 5000 ? 22 : avgDaily < 9000 ? 24 : 26;
+
+  const windowStart = new Date(recentWeeks[0] + "T00:00:00");
+  const workoutDaysInWindow = getAllWorkoutEntriesByDate()
+    .filter(({ date }) => new Date(date + "T00:00:00") >= windowStart).length;
+
+  let bumped = false;
+  if (workoutDaysInWindow >= 4 && level < 26) {
+    level += 2;
+    bumped = true;
+  }
+
+  return { avgDaily, weeksUsed: recentWeeks.length, workoutDaysInWindow, level, bumped };
+}
+
 function renderWeightView() {
   const settings = loadSettings();
   document.getElementById("activityLevel").value = settings.activityLevel;
@@ -566,6 +596,23 @@ function renderWeightView() {
   const activityLevel = Number(document.getElementById("activityLevel").value) || DEFAULT_ACTIVITY_LEVEL;
   const maintenance = Math.round(currentWeight * activityLevel);
   document.getElementById("suggestedCalories").textContent = Math.max(0, maintenance - 200);
+
+  const stepsBox = document.getElementById("stepsInsightBox");
+  const stepsInsight = computeStepBasedActivityLevel();
+  if (!stepsInsight) {
+    stepsBox.classList.add("hidden");
+  } else {
+    stepsBox.classList.remove("hidden");
+    const levelName = stepsInsight.level === 22 ? "Sedentary" : stepsInsight.level === 24 ? "Moderately active" : "Very active";
+    const bumpNote = stepsInsight.bumped
+      ? ` — bumped up from steps alone since you've logged ${stepsInsight.workoutDaysInWindow} workout days in that window (steps alone miss lifting).`
+      : "";
+    document.getElementById("stepsInsightReasoning").textContent =
+      `Avg ${stepsInsight.avgDaily.toLocaleString()} steps/day over your last ${stepsInsight.weeksUsed} weeks of history → "${levelName}"${bumpNote}`;
+    const applyStepsBtn = document.getElementById("applyStepsLevel");
+    applyStepsBtn.dataset.value = stepsInsight.level;
+    applyStepsBtn.classList.toggle("hidden", stepsInsight.level === activityLevel);
+  }
 
   const adaptiveBox = document.getElementById("adaptiveBox");
   const adaptive = computeAdaptiveSuggestion(allByDate, activityLevel, loadTargets().calories);
@@ -784,6 +831,14 @@ document.getElementById("applyAdaptive").addEventListener("click", (e) => {
   saveTargets(targets);
   render();
   switchTab("nutrition");
+});
+
+document.getElementById("applyStepsLevel").addEventListener("click", (e) => {
+  const value = Number(e.target.dataset.value);
+  if (!value) return;
+  document.getElementById("activityLevel").value = value;
+  saveSettings({ activityLevel: value });
+  renderWeightView();
 });
 
 // ---------- Sheets (bottom modals) ----------
@@ -1075,6 +1130,7 @@ async function loadCloudData(key) {
   cloud.activityLevel = data.activityLevel || DEFAULT_ACTIVITY_LEVEL;
   cloud.oneRepMaxes = data.oneRepMaxes || {};
   cloud.theme = data.theme || "classic";
+  cloud.weeklySteps = data.weeklySteps || {}; // { "YYYY-MM-DD" (week start): totalSteps } — imported history, no logging UI yet
   cloud.days = {};
 
   const daysSnap = await profileDocRef.collection("days").get();
