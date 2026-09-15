@@ -1150,6 +1150,10 @@ async function analyzeFoodPhoto(dataUrl) {
     // Deliberately not using result.calories directly — recalculate from the
     // macros above so calories can never disagree with them (see recalcMealCalories).
     recalcMealCalories();
+    // The photo call already priced this exact name — remember it so the
+    // auto-re-estimate-on-blur below doesn't immediately re-ask for the same
+    // thing the instant focus leaves the field.
+    lastAnalyzedName = document.getElementById("mealName").value.trim();
 
     statusEl.textContent = "Estimated from photo — check the numbers before saving.";
   } catch (err) {
@@ -1157,17 +1161,22 @@ async function analyzeFoodPhoto(dataUrl) {
   }
 }
 
-// Text-only re-estimate: the photo AI sometimes misidentifies the dish. Once
-// Kevin corrects the meal name, this re-asks the same backend (text mode, no
-// image) to re-price calories/macros off the corrected name instead of
-// leaving him to hand-calculate them.
-async function reestimateFromName() {
+// Text-only re-estimate: the photo AI sometimes misidentifies the dish, or
+// there's no photo at all. This re-asks the same backend (text mode, no
+// image) to price calories/macros off the meal name — fires automatically
+// once Kevin finishes typing/correcting the name (blur), and can also be
+// triggered manually via the button for an explicit retry.
+let lastAnalyzedName = "";
+let reestimateInFlight = false;
+async function reestimateFromName(force = false) {
   const statusEl = document.getElementById("analyzeStatus");
   const name = document.getElementById("mealName").value.trim();
-  if (!name) {
-    statusEl.textContent = "Type a meal name first.";
-    return;
-  }
+  if (!name) return; // nothing typed yet — nothing to estimate
+  if (reestimateInFlight) return; // a call is already in flight (e.g. blur + button click racing) — don't double up
+  if (!force && name === lastAnalyzedName) return; // unchanged since last check — don't re-spend an API call for nothing
+
+  reestimateInFlight = true;
+  lastAnalyzedName = name;
   statusEl.textContent = "Re-checking macros for “" + name + "”…";
 
   try {
@@ -1180,18 +1189,27 @@ async function reestimateFromName() {
     if (!res.ok) throw new Error(`Backend returned ${res.status}`);
     const result = await res.json();
 
-    document.getElementById("mealCarbs").value = Math.round(result.carbs_g || 0);
-    document.getElementById("mealProtein").value = Math.round(result.protein_g || 0);
-    document.getElementById("mealFat").value = Math.round(result.fat_g || 0);
-    recalcMealCalories();
-
-    statusEl.textContent = "Updated from “" + name + "” — check the numbers before saving.";
+    // The description may still have changed while this was in flight —
+    // only apply the result if the name field still matches what we asked about.
+    if (document.getElementById("mealName").value.trim() === name) {
+      document.getElementById("mealCarbs").value = Math.round(result.carbs_g || 0);
+      document.getElementById("mealProtein").value = Math.round(result.protein_g || 0);
+      document.getElementById("mealFat").value = Math.round(result.fat_g || 0);
+      recalcMealCalories();
+      statusEl.textContent = "Updated from “" + name + "” — check the numbers before saving.";
+    }
   } catch (err) {
     statusEl.textContent = "Couldn't re-check that name — enter macros manually.";
+  } finally {
+    reestimateInFlight = false;
   }
 }
 
-document.getElementById("reestimateBtn").addEventListener("click", reestimateFromName);
+document.getElementById("reestimateBtn").addEventListener("click", () => reestimateFromName(true));
+// Automatic: re-price macros as soon as the meal name is added/edited and the
+// field loses focus — this is the actual "automatically adjust" behavior
+// Kevin asked for, the button above just remains as a manual fallback/retry.
+document.getElementById("mealName").addEventListener("blur", () => reestimateFromName(false));
 
 document.getElementById("photoInput").addEventListener("change", async (e) => {
   const file = e.target.files[0];
@@ -1208,6 +1226,7 @@ document.getElementById("photoInput").addEventListener("change", async (e) => {
 
 function openAddMealSheet() {
   editingMealId = null;
+  lastAnalyzedName = ""; // fresh sheet — any name typed here should trigger an auto re-check on blur
   document.getElementById("mealSheetTitle").textContent = "Log a meal";
   document.getElementById("mealSubmitBtn").textContent = "Save meal";
   recalcMealCalories(); // blank macro fields -> shows 0, not an empty field
@@ -1219,6 +1238,9 @@ function openEditMealSheet(meal) {
   document.getElementById("mealSheetTitle").textContent = "Edit meal";
   document.getElementById("mealSubmitBtn").textContent = "Save changes";
   document.getElementById("mealName").value = meal.name;
+  // Seed lastAnalyzedName to the meal's current name so simply opening/closing
+  // this field without changing it doesn't fire a wasted auto re-check on blur.
+  lastAnalyzedName = meal.name;
   document.getElementById("mealCarbs").value = meal.carbs;
   document.getElementById("mealProtein").value = meal.protein;
   document.getElementById("mealFat").value = meal.fat;
