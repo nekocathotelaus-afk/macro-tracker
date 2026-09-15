@@ -51,7 +51,17 @@ let activeTab = "nutrition"; // "nutrition" | "workouts" | "weight"
 
 // ---------- Helpers ----------
 function dateKey(d) {
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD (local-ish; fine for a personal single-user app)
+  // LOCAL calendar date, not UTC. toISOString() converts to UTC first, which
+  // in Melbourne (UTC+10/+11) means anything logged between midnight and
+  // ~10-11am local still reads as "yesterday" by the clock, and — the bug
+  // Kevin actually hit — food logged the night before can still get counted
+  // under "Today" for hours after his local calendar day has already rolled
+  // over, since the app's own notion of "today" lags local midnight by the
+  // UTC offset. Building the key from local Y/M/D fixes both directions.
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function formatDateLabel(d) {
@@ -370,6 +380,7 @@ function render() {
     meals.forEach((m) => {
       const li = document.createElement("li");
       li.className = "meal-item glass";
+      li.setAttribute("data-id", m.id);
       li.innerHTML = `
         ${m.photo ? `<img class="meal-thumb" src="${m.photo}" alt="" />` : `<div class="meal-thumb"></div>`}
         <div class="meal-info">
@@ -680,7 +691,7 @@ function bucketKeyForDate(dateStr, period) {
   const diffToMonday = (day === 0 ? -6 : 1) - day;
   const monday = new Date(d);
   monday.setDate(d.getDate() + diffToMonday);
-  return monday.toISOString().slice(0, 10);
+  return dateKey(monday); // local-date key — see dateKey() note on why not toISOString()
 }
 
 // Short label for the per-bar/per-point x-axis (has to fit under up to 12
@@ -917,9 +928,19 @@ const addWeightSheet = document.getElementById("addWeightSheet");
 const settingsSheet = document.getElementById("settingsSheet");
 const SHEET_BY_TAB = { nutrition: addSheet, workouts: addWorkoutSheet, weight: addWeightSheet };
 
-document.getElementById("fabAdd").addEventListener("click", () => openSheet(SHEET_BY_TAB[activeTab]));
-document.getElementById("sheetCancel").addEventListener("click", () => closeSheet(addSheet));
-addSheet.addEventListener("click", (e) => { if (e.target === addSheet) closeSheet(addSheet); });
+document.getElementById("fabAdd").addEventListener("click", () => {
+  if (activeTab === "nutrition") openAddMealSheet();
+  else openSheet(SHEET_BY_TAB[activeTab]);
+});
+function cancelMealSheet() {
+  editingMealId = null;
+  document.getElementById("mealForm").reset();
+  pendingPhoto = null;
+  document.getElementById("photoPreview").innerHTML = '<svg class="inline-icon"><use href="#icon-camera"/></svg> Add photo — auto-fills macros';
+  closeSheet(addSheet);
+}
+document.getElementById("sheetCancel").addEventListener("click", cancelMealSheet);
+addSheet.addEventListener("click", (e) => { if (e.target === addSheet) cancelMealSheet(); });
 
 document.getElementById("weightSheetCancel").addEventListener("click", () => closeSheet(addWeightSheet));
 addWeightSheet.addEventListener("click", (e) => { if (e.target === addWeightSheet) closeSheet(addWeightSheet); });
@@ -1081,6 +1102,12 @@ function compressImage(file, maxDimension, quality) {
   });
 }
 
+// `editingMealId` tracks whether the sheet is in "add" or "edit" mode.
+// null = adding a new meal to currentDate; otherwise the id of the meal
+// being edited in place (name/macros correctable after the fact — see
+// re-estimateFromName below for why this exists).
+let editingMealId = null;
+
 async function analyzeFoodPhoto(dataUrl) {
   const statusEl = document.getElementById("analyzeStatus");
   statusEl.textContent = "Analyzing photo…";
@@ -1110,6 +1137,42 @@ async function analyzeFoodPhoto(dataUrl) {
   }
 }
 
+// Text-only re-estimate: the photo AI sometimes misidentifies the dish. Once
+// Kevin corrects the meal name, this re-asks the same backend (text mode, no
+// image) to re-price calories/macros off the corrected name instead of
+// leaving him to hand-calculate them.
+async function reestimateFromName() {
+  const statusEl = document.getElementById("analyzeStatus");
+  const name = document.getElementById("mealName").value.trim();
+  if (!name) {
+    statusEl.textContent = "Type a meal name first.";
+    return;
+  }
+  statusEl.textContent = "Re-checking macros for “" + name + "”…";
+
+  try {
+    const res = await fetch(PHOTO_ANALYZE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ foodName: name }),
+    });
+
+    if (!res.ok) throw new Error(`Backend returned ${res.status}`);
+    const result = await res.json();
+
+    document.getElementById("mealCalories").value = Math.round(result.calories || 0);
+    document.getElementById("mealCarbs").value = Math.round(result.carbs_g || 0);
+    document.getElementById("mealProtein").value = Math.round(result.protein_g || 0);
+    document.getElementById("mealFat").value = Math.round(result.fat_g || 0);
+
+    statusEl.textContent = "Updated from “" + name + "” — check the numbers before saving.";
+  } catch (err) {
+    statusEl.textContent = "Couldn't re-check that name — enter macros manually.";
+  }
+}
+
+document.getElementById("reestimateBtn").addEventListener("click", reestimateFromName);
+
 document.getElementById("photoInput").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -1123,11 +1186,35 @@ document.getElementById("photoInput").addEventListener("change", async (e) => {
   analyzeFoodPhoto(analysisImage);
 });
 
+function openAddMealSheet() {
+  editingMealId = null;
+  document.getElementById("mealSheetTitle").textContent = "Log a meal";
+  document.getElementById("mealSubmitBtn").textContent = "Save meal";
+  openSheet(addSheet);
+}
+
+function openEditMealSheet(meal) {
+  editingMealId = meal.id;
+  document.getElementById("mealSheetTitle").textContent = "Edit meal";
+  document.getElementById("mealSubmitBtn").textContent = "Save changes";
+  document.getElementById("mealName").value = meal.name;
+  document.getElementById("mealCalories").value = meal.calories;
+  document.getElementById("mealCarbs").value = meal.carbs;
+  document.getElementById("mealProtein").value = meal.protein;
+  document.getElementById("mealFat").value = meal.fat;
+  document.getElementById("mealNotes").value = meal.notes || "";
+  pendingPhoto = meal.photo || null;
+  document.getElementById("photoPreview").innerHTML = meal.photo
+    ? `<img src="${meal.photo}" alt="Meal photo" />`
+    : '<svg class="inline-icon"><use href="#icon-camera"/></svg> Add photo — auto-fills macros';
+  document.getElementById("analyzeStatus").textContent = "";
+  openSheet(addSheet);
+}
+
 document.getElementById("mealForm").addEventListener("submit", (e) => {
   e.preventDefault();
 
-  const meal = {
-    id: Date.now().toString(),
+  const mealFields = {
     name: document.getElementById("mealName").value.trim(),
     calories: Number(document.getElementById("mealCalories").value) || 0,
     carbs: Number(document.getElementById("mealCarbs").value) || 0,
@@ -1135,16 +1222,21 @@ document.getElementById("mealForm").addEventListener("submit", (e) => {
     fat: Number(document.getElementById("mealFat").value) || 0,
     photo: pendingPhoto,
     notes: document.getElementById("mealNotes").value.trim(),
-    time: new Date().toISOString(),
   };
 
   const meals = loadDay(currentDate);
-  meals.push(meal);
+  if (editingMealId) {
+    const idx = meals.findIndex((m) => m.id === editingMealId);
+    if (idx !== -1) meals[idx] = { ...meals[idx], ...mealFields };
+  } else {
+    meals.push({ id: Date.now().toString(), time: new Date().toISOString(), ...mealFields });
+  }
   saveDay(currentDate, meals);
 
   // reset form
   e.target.reset();
   pendingPhoto = null;
+  editingMealId = null;
   document.getElementById("photoPreview").innerHTML = '<svg class="inline-icon"><use href="#icon-camera"/></svg> Add photo — auto-fills macros';
   closeSheet(addSheet);
 
@@ -1152,11 +1244,18 @@ document.getElementById("mealForm").addEventListener("submit", (e) => {
 });
 
 document.getElementById("mealList").addEventListener("click", (e) => {
-  if (!e.target.classList.contains("delete-btn")) return;
-  const id = e.target.getAttribute("data-id");
-  const meals = loadDay(currentDate).filter((m) => m.id !== id);
-  saveDay(currentDate, meals);
-  render();
+  if (e.target.classList.contains("delete-btn")) {
+    const id = e.target.getAttribute("data-id");
+    const meals = loadDay(currentDate).filter((m) => m.id !== id);
+    saveDay(currentDate, meals);
+    render();
+    return;
+  }
+  const item = e.target.closest(".meal-item");
+  if (!item) return;
+  const id = item.getAttribute("data-id");
+  const meal = loadDay(currentDate).find((m) => m.id === id);
+  if (meal) openEditMealSheet(meal);
 });
 
 // ---------- Auth gate (Phase B: name + passcode, data now lives per-account) ----------

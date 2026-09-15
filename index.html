@@ -290,7 +290,7 @@
   <div id="addSheet" class="sheet-backdrop">
     <div class="sheet glass">
       <div class="sheet-handle"></div>
-      <h2>Log a meal</h2>
+      <h2 id="mealSheetTitle">Log a meal</h2>
       <form id="mealForm">
         <label class="photo-label" for="photoInput">
           <div id="photoPreview" class="photo-preview"><svg class="inline-icon"><use href="#icon-camera"/></svg> Add photo — auto-fills macros</div>
@@ -298,7 +298,11 @@
         </label>
         <p id="analyzeStatus" class="pct-hint"></p>
 
-        <input type="text" id="mealName" placeholder="Meal name (e.g. Chicken & rice)" required />
+        <div class="name-with-action">
+          <input type="text" id="mealName" placeholder="Meal name (e.g. Chicken & rice)" required />
+          <button type="button" id="reestimateBtn" class="ghost-btn small-btn">Re-check macros</button>
+        </div>
+        <p class="field-hint">Got the food wrong? Fix the name above, then tap "Re-check macros" to re-estimate.</p>
 
         <div class="macro-inputs">
           <div class="field">
@@ -323,7 +327,7 @@
 
         <div class="sheet-actions">
           <button type="button" id="sheetCancel" class="ghost-btn">Cancel</button>
-          <button type="submit" class="primary-btn">Save meal</button>
+          <button type="submit" id="mealSubmitBtn" class="primary-btn">Save meal</button>
         </div>
       </form>
     </div>
