@@ -1051,40 +1051,48 @@ document.getElementById("workoutList").addEventListener("click", (e) => {
 // HTML only affect form validation, not what you can actually type into a
 // number field, so this clamps for real on every keystroke.
 const TARGET_LIMITS = { targetCaloriesInput: 6000, targetCarbsInput: 800, targetProteinInput: 500, targetFatInput: 300 };
-function clampTargetField(id) {
-  const el = document.getElementById(id);
-  const max = TARGET_LIMITS[id];
-  if (Number(el.value) > max) el.value = max;
-  updateTargetMathHint();
-}
-Object.keys(TARGET_LIMITS).forEach((id) => {
-  document.getElementById(id).addEventListener("input", () => clampTargetField(id));
-});
 
-// Calories and macro targets are intentionally independent (the weight-tab
-// suggestions and adaptive-calorie feature set Calories on its own, without
-// touching macro targets) — so this is informational only, not enforced,
-// unlike the per-meal Calories field which IS strictly derived. Kevin asked
-// twice now for "the macro and calorie maths to make sense" — this makes any
-// big mismatch visible without breaking the independent-target design.
-function updateTargetMathHint() {
-  const carbs = Number(document.getElementById("targetCarbsInput").value) || 0;
+// Calories is the anchor (it's what the weight-tab suggestions and adaptive
+// calorie feature set), Protein and Fat are the macros Kevin actively dials
+// in (body-recomp targets: protein for muscle retention, fat for hormones).
+// Carbs is the flexible one — it's calculated as whatever's left of the
+// calorie budget once protein/fat are accounted for, same idea as classic
+// "if it fits your macros" targets. This is the opposite direction from the
+// per-meal fix (there, real food's calories ARE fixed by its macros, so
+// Calories was the derived field); here, the calorie TARGET is the fixed
+// thing and Carbs bends to fit it.
+function recalcTargetCarbs() {
+  const calories = Number(document.getElementById("targetCaloriesInput").value) || 0;
   const protein = Number(document.getElementById("targetProteinInput").value) || 0;
   const fat = Number(document.getElementById("targetFatInput").value) || 0;
-  const calories = Number(document.getElementById("targetCaloriesInput").value) || 0;
-  const impliedCalories = Math.round(carbs * 4 + protein * 4 + fat * 9);
+  const carbs = Math.round((calories - protein * 4 - fat * 9) / 4);
   const hintEl = document.getElementById("targetMathHint");
-  const diff = Math.abs(impliedCalories - calories);
-  hintEl.textContent = `These macros add up to ≈${impliedCalories} kcal (your calorie target is ${calories}${diff > 150 ? " — worth double-checking, that's a big gap" : ""}).`;
+  if (carbs < 0) {
+    document.getElementById("targetCarbsInput").value = 0;
+    hintEl.textContent = `Protein + fat alone already add up to more than ${calories} kcal — raise the calorie target or lower protein/fat.`;
+  } else {
+    document.getElementById("targetCarbsInput").value = Math.min(TARGET_LIMITS.targetCarbsInput, carbs);
+    hintEl.textContent = `Carbs set to ${document.getElementById("targetCarbsInput").value}g so protein + fat + carbs add up to your ${calories} kcal target.`;
+  }
 }
+["targetCaloriesInput", "targetProteinInput", "targetFatInput"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", () => {
+    const el = document.getElementById(id);
+    const max = TARGET_LIMITS[id];
+    if (Number(el.value) > max) el.value = max; // real clamp, not just the HTML max attribute
+    recalcTargetCarbs();
+  });
+});
 
 document.getElementById("settingsBtn").addEventListener("click", () => {
   const t = loadTargets();
   document.getElementById("targetCaloriesInput").value = t.calories;
-  document.getElementById("targetCarbsInput").value = t.carbs;
   document.getElementById("targetProteinInput").value = t.protein;
   document.getElementById("targetFatInput").value = t.fat;
-  updateTargetMathHint();
+  // Recompute rather than trust the stored carbs value — keeps old/legacy
+  // targets self-consistent the moment they're reopened, same pattern as
+  // the meal-edit sheet's recalcMealCalories().
+  recalcTargetCarbs();
   document.getElementById("loggedInAsName").textContent =
     localStorage.getItem(CURRENT_PROFILE_DISPLAY_KEY) || "(unknown)";
   openSheet(settingsSheet);
@@ -1093,13 +1101,12 @@ document.getElementById("settingsCancel").addEventListener("click", () => closeS
 settingsSheet.addEventListener("click", (e) => { if (e.target === settingsSheet) closeSheet(settingsSheet); });
 
 document.getElementById("settingsSave").addEventListener("click", () => {
+  recalcTargetCarbs(); // final recompute as a backstop before saving
   const targets = {
-    // Clamp again at save time as a hard backstop, not just on input — belt
-    // and braces against any way a bad value could reach here.
     calories: Math.min(TARGET_LIMITS.targetCaloriesInput, Number(document.getElementById("targetCaloriesInput").value) || DEFAULT_TARGETS.calories),
-    carbs: Math.min(TARGET_LIMITS.targetCarbsInput, Number(document.getElementById("targetCarbsInput").value) || DEFAULT_TARGETS.carbs),
     protein: Math.min(TARGET_LIMITS.targetProteinInput, Number(document.getElementById("targetProteinInput").value) || DEFAULT_TARGETS.protein),
     fat: Math.min(TARGET_LIMITS.targetFatInput, Number(document.getElementById("targetFatInput").value) || DEFAULT_TARGETS.fat),
+    carbs: Number(document.getElementById("targetCarbsInput").value) || 0,
   };
   saveTargets(targets);
   closeSheet(settingsSheet);
