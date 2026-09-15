@@ -300,6 +300,25 @@ h2 { font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bot
 }
 .period-btn.active { background: var(--series-1); color: #fff; }
 
+.range-nav {
+  margin: 10px 16px 0;
+  border-radius: 16px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.range-nav .date-label { min-width: auto; font-size: 13px; }
+.range-nav .icon-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  width: 30px;
+  height: 30px;
+  font-size: 15px;
+}
+.range-nav .icon-btn:disabled { opacity: 0.35; cursor: default; }
+
 .bar-chart-bar { rx: 4; }
 .bar-chart-label { fill: var(--text-muted); font-size: 6px; font-family: system-ui, sans-serif; }
 .bar-chart-value { fill: var(--text-primary); font-size: 7px; font-weight: 600; font-family: system-ui, sans-serif; }

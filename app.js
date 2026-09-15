@@ -146,13 +146,14 @@ function saveSettings(partial) {
   if (profileDocRef) profileDocRef.update(partial).catch((err) => console.error("Failed to sync settings", err));
 }
 
-// Shared line-chart renderer — used by both exercise progression and weight trend.
-// Caller is responsible for the "not enough data yet" empty state (assumes
-// >=2 points) AND for providing a display-ready `label` on each point —
-// this function does no date parsing/formatting itself, so it works equally
-// for raw per-day dates (pre-formatted by the caller) and pre-aggregated
-// period labels (dashboard's "Sep 26", "Jan '26", etc).
-function drawTrendChart(chartEl, points, unit) {
+// Shared line-chart renderer — used by exercise progression, the regular
+// Weight tab (both unbounded — can have 50+ points once real history is
+// imported), and the dashboard's weight trend (always capped at <=20 points).
+// `labelAll`: when true, every point gets its value + axis label (only safe
+// for the capped dashboard case — Kevin explicitly asked for numbers there).
+// Default stays sparse (first/last axis label, last value only) since
+// labeling 50+ points would be unreadable, not a stylistic choice to skip.
+function drawTrendChart(chartEl, points, unit, labelAll = false) {
   const w = 300, h = 120, pad = 18;
   const values = points.map((p) => p.value);
   const minV = Math.min(...values), maxV = Math.max(...values);
@@ -168,13 +169,26 @@ function drawTrendChart(chartEl, points, unit) {
   const first = coords[0];
   const last = coords[coords.length - 1];
 
-  chartEl.innerHTML = `
-    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
-      <path class="progression-line" d="${pathD}"></path>
+  let extraSvg = "";
+  if (labelAll) {
+    extraSvg = coords.map((c) => `
+      <circle class="progression-dot" cx="${c.x}" cy="${c.y}" r="3"></circle>
+      <text class="progression-value-label" x="${c.x}" y="${Math.max(10, c.y - 7)}" text-anchor="middle">${c.value}${unit}</text>
+      <text class="progression-axis-label" x="${c.x}" y="${h - 4}" text-anchor="middle">${c.label}</text>
+    `).join("");
+  } else {
+    extraSvg = `
       <circle class="progression-dot" cx="${last.x}" cy="${last.y}" r="4"></circle>
       <text class="progression-value-label" x="${last.x}" y="${Math.max(10, last.y - 8)}" text-anchor="end">${last.value}${unit}</text>
       <text class="progression-axis-label" x="${first.x}" y="${h - 4}" text-anchor="start">${first.label}</text>
       <text class="progression-axis-label" x="${last.x}" y="${h - 4}" text-anchor="end">${last.label}</text>
+    `;
+  }
+
+  chartEl.innerHTML = `
+    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
+      <path class="progression-line" d="${pathD}"></path>
+      ${extraSvg}
     </svg>
   `;
 }
@@ -652,6 +666,8 @@ function renderWeightView() {
 
 // ---------- Dashboard (weekly/monthly/yearly trends) ----------
 let dashboardPeriod = "weekly";
+let dashboardOffset = 0; // 0 = most recent window; 1 = one window further back, etc.
+const DASHBOARD_MAX_BUCKETS = { weekly: 8, monthly: 12, yearly: 20 };
 
 // Groups a YYYY-MM-DD string into a period bucket key. Weekly buckets key on
 // that week's Monday (ISO-ish, not calendar-locale-dependent); monthly on
@@ -667,6 +683,10 @@ function bucketKeyForDate(dateStr, period) {
   return monday.toISOString().slice(0, 10);
 }
 
+// Short label for the per-bar/per-point x-axis (has to fit under up to 12
+// bars in a 300px-wide chart — full "September 2026" on every bar would
+// overlap badly). Full month/year context instead lives in the range-nav
+// label above the chart (see bucketFullLabel), so nothing's actually lost.
 function bucketLabel(key, period) {
   if (period === "yearly") return key;
   if (period === "monthly") {
@@ -676,10 +696,20 @@ function bucketLabel(key, period) {
   return new Date(key + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-// One pass over every loaded day, grouped into period buckets. Caps how many
-// buckets are shown (most recent N) so the chart doesn't get unreadable for
-// an account with years of history.
-function aggregateByPeriod(period) {
+// Full, explicit label for the range-nav bar ("September 2026", "Sep 15, 2026").
+function bucketFullLabel(key, period) {
+  if (period === "yearly") return key;
+  if (period === "monthly") {
+    const [y, m] = key.split("-");
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }
+  return new Date(key + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+// One pass over every loaded day, grouped into period buckets. `offset` pages
+// backward in units of a full window (8 weeks / 12 months / 20 years) so
+// older history is reachable via prev/next, not just the most recent slice.
+function aggregateByPeriod(period, offset) {
   const buckets = {};
   for (const [dateStr, day] of Object.entries(cloud.days)) {
     const key = bucketKeyForDate(dateStr, period);
@@ -697,32 +727,41 @@ function aggregateByPeriod(period) {
     }
   }
 
-  const maxBuckets = period === "weekly" ? 8 : period === "monthly" ? 12 : 20;
-  const keys = Object.keys(buckets).sort().slice(-maxBuckets);
+  const maxBuckets = DASHBOARD_MAX_BUCKETS[period];
+  const allKeys = Object.keys(buckets).sort();
+  const endIndex = allKeys.length - offset * maxBuckets;
+  const startIndex = Math.max(0, endIndex - maxBuckets);
+  const keys = allKeys.slice(Math.max(0, startIndex), Math.max(0, endIndex));
+  const hasEarlier = startIndex > 0;
+  const hasLater = offset > 0;
 
-  return keys.map((key) => {
+  const points = keys.map((key) => {
     const b = buckets[key];
     return {
+      key,
       label: bucketLabel(key, period),
       avgCalories: b.calorieDayCount ? Math.round(b.calorieSum / b.calorieDayCount) : null,
       avgWeight: b.weightVals.length ? Math.round((b.weightVals.reduce((a, c) => a + c, 0) / b.weightVals.length) * 10) / 10 : null,
       workoutDays: b.workoutDayCount,
     };
   });
+
+  return { points, hasEarlier, hasLater };
 }
 
-// Simple bar chart: thin bars off a single baseline, value labeled on the
-// last bar only (dataviz guidance — never a number on every bar), category
-// labels under each bar. `points` = [{ label, value }].
+// Simple bar chart: thin bars off a single baseline, category labels under
+// each bar. Every bar gets its value labeled above it (Kevin explicitly
+// asked for numbers on the trends charts — overrides the usual "label
+// sparingly" default deliberately, not by oversight).
 function drawBarChart(chartEl, points, unit) {
-  const w = 300, h = 130, pad = 18, baselineY = h - 24;
+  const w = 300, h = 140, pad = 18, baselineY = h - 30;
   const values = points.map((p) => p.value);
   const maxV = Math.max(...values, 1);
   const barWidth = Math.min(24, (w - pad * 2) / points.length - 6);
   const step = (w - pad * 2) / points.length;
 
   const bars = points.map((p, i) => {
-    const barH = (p.value / maxV) * (baselineY - 12);
+    const barH = (p.value / maxV) * (baselineY - 20);
     const x = pad + i * step + (step - barWidth) / 2;
     const y = baselineY - barH;
     return { ...p, x, y, barH };
@@ -731,22 +770,29 @@ function drawBarChart(chartEl, points, unit) {
   const barsSvg = bars.map((b) => `
     <rect class="bar-chart-bar" x="${b.x}" y="${b.y}" width="${barWidth}" height="${Math.max(1, b.barH)}"
           rx="4" fill="var(--series-1)"></rect>
-    <text class="bar-chart-label" x="${b.x + barWidth / 2}" y="${h - 6}" text-anchor="middle">${b.label}</text>
+    <text class="bar-chart-value" x="${b.x + barWidth / 2}" y="${Math.max(10, b.y - 5)}" text-anchor="middle">${b.value}${unit}</text>
+    <text class="bar-chart-label" x="${b.x + barWidth / 2}" y="${h - 8}" text-anchor="middle">${b.label}</text>
   `).join("");
-
-  const last = bars[bars.length - 1];
 
   chartEl.innerHTML = `
     <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
       <line class="bar-chart-baseline" x1="${pad}" y1="${baselineY}" x2="${w - pad}" y2="${baselineY}"></line>
       ${barsSvg}
-      <text class="bar-chart-value" x="${last.x + barWidth / 2}" y="${Math.max(10, last.y - 6)}" text-anchor="middle">${last.value}${unit}</text>
     </svg>
   `;
 }
 
 function renderDashboard() {
-  const data = aggregateByPeriod(dashboardPeriod);
+  const { points: data, hasEarlier, hasLater } = aggregateByPeriod(dashboardPeriod, dashboardOffset);
+
+  const rangeLabel = document.getElementById("dashRangeLabel");
+  rangeLabel.textContent = data.length
+    ? (data.length === 1
+        ? bucketFullLabel(data[0].key, dashboardPeriod)
+        : `${bucketFullLabel(data[0].key, dashboardPeriod)} – ${bucketFullLabel(data[data.length - 1].key, dashboardPeriod)}`)
+    : "No data yet";
+  document.getElementById("dashPrevRange").disabled = !hasEarlier;
+  document.getElementById("dashNextRange").disabled = !hasLater;
 
   const calPoints = data.filter((d) => d.avgCalories !== null).map((d) => ({ label: d.label, value: d.avgCalories }));
   const calEl = document.getElementById("dashCaloriesChart");
@@ -761,7 +807,7 @@ function renderDashboard() {
   if (weightPoints.length < 2) {
     weightEl.innerHTML = `<p class="empty-state">Log your weight across a few periods to see this.</p>`;
   } else {
-    drawTrendChart(weightEl, weightPoints, "kg");
+    drawTrendChart(weightEl, weightPoints, "kg", true);
   }
 
   const workoutPoints = data.map((d) => ({ label: d.label, value: d.workoutDays }));
@@ -776,9 +822,19 @@ function renderDashboard() {
 document.querySelectorAll(".period-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     dashboardPeriod = btn.dataset.period;
+    dashboardOffset = 0;
     document.querySelectorAll(".period-btn").forEach((b) => b.classList.toggle("active", b === btn));
     renderDashboard();
   });
+});
+
+document.getElementById("dashPrevRange").addEventListener("click", () => {
+  dashboardOffset += 1;
+  renderDashboard();
+});
+document.getElementById("dashNextRange").addEventListener("click", () => {
+  dashboardOffset = Math.max(0, dashboardOffset - 1);
+  renderDashboard();
 });
 
 // ---------- Tabs ----------
