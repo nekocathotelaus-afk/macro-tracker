@@ -617,6 +617,8 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
   document.getElementById("targetCarbsInput").value = t.carbs;
   document.getElementById("targetProteinInput").value = t.protein;
   document.getElementById("targetFatInput").value = t.fat;
+  document.getElementById("loggedInAsName").textContent =
+    localStorage.getItem(CURRENT_PROFILE_DISPLAY_KEY) || "(unknown)";
   openSheet(settingsSheet);
 });
 document.getElementById("settingsCancel").addEventListener("click", () => closeSheet(settingsSheet));
@@ -744,5 +746,99 @@ document.getElementById("mealList").addEventListener("click", (e) => {
   render();
 });
 
+// ---------- Auth gate (Phase A: name + passcode only, no real security) ----------
+// Data (meals/workouts/weight) still lives in localStorage for now, shared by
+// whoever's logged in on this browser — per-profile data storage is Phase B,
+// not built yet. This phase only proves login/signup works against Firestore.
+const CURRENT_PROFILE_KEY = "macro-tracker-current-profile";
+const CURRENT_PROFILE_DISPLAY_KEY = "macro-tracker-current-profile-display";
+
+function sanitizeProfileKey(name) {
+  return name.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+function showApp() {
+  document.getElementById("authGate").classList.add("hidden");
+  document.getElementById("appRoot").classList.remove("hidden");
+  render();
+}
+
+function completeLogin(key, displayName) {
+  localStorage.setItem(CURRENT_PROFILE_KEY, key);
+  localStorage.setItem(CURRENT_PROFILE_DISPLAY_KEY, displayName);
+  showApp();
+}
+
+async function attemptSignup() {
+  const rawName = document.getElementById("authName").value;
+  const passcode = document.getElementById("authPasscode").value;
+  const errorEl = document.getElementById("authError");
+  errorEl.textContent = "";
+
+  const key = sanitizeProfileKey(rawName);
+  if (!key || !passcode) {
+    errorEl.textContent = "Enter a name and passcode.";
+    return;
+  }
+
+  try {
+    const docRef = db.collection("profiles").doc(key);
+    const doc = await docRef.get();
+    if (doc.exists) {
+      errorEl.textContent = "That name is taken — log in instead, or pick another name.";
+      return;
+    }
+    await docRef.set({ displayName: rawName.trim(), passcode, createdAt: new Date().toISOString() });
+    completeLogin(key, rawName.trim());
+  } catch (err) {
+    errorEl.textContent = "Couldn't reach the server — try again.";
+    console.error(err);
+  }
+}
+
+async function attemptLogin() {
+  const rawName = document.getElementById("authName").value;
+  const passcode = document.getElementById("authPasscode").value;
+  const errorEl = document.getElementById("authError");
+  errorEl.textContent = "";
+
+  const key = sanitizeProfileKey(rawName);
+  if (!key || !passcode) {
+    errorEl.textContent = "Enter a name and passcode.";
+    return;
+  }
+
+  try {
+    const docRef = db.collection("profiles").doc(key);
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      errorEl.textContent = "No profile with that name — create one instead.";
+      return;
+    }
+    if (doc.data().passcode !== passcode) {
+      errorEl.textContent = "Wrong passcode.";
+      return;
+    }
+    completeLogin(key, doc.data().displayName || rawName.trim());
+  } catch (err) {
+    errorEl.textContent = "Couldn't reach the server — try again.";
+    console.error(err);
+  }
+}
+
+document.getElementById("authLoginBtn").addEventListener("click", attemptLogin);
+document.getElementById("authSignupBtn").addEventListener("click", attemptSignup);
+
+document.getElementById("logoutBtn").addEventListener("click", () => {
+  localStorage.removeItem(CURRENT_PROFILE_KEY);
+  localStorage.removeItem(CURRENT_PROFILE_DISPLAY_KEY);
+  location.reload();
+});
+
 // ---------- Init ----------
-render();
+// Auto-login if a profile was remembered on this browser (intentional — this
+// phase has no real security, so re-typing the passcode every visit isn't the
+// point; the passcode gate matters for *creating*/*switching* profiles).
+if (localStorage.getItem(CURRENT_PROFILE_KEY)) {
+  showApp();
+}

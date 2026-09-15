@@ -10,6 +10,25 @@
 
   <div class="bg-glow" aria-hidden="true"></div>
 
+  <!-- Login gate: name + passcode only, no real security (by design — see CLAUDE.md).
+       Shown until a profile is picked; hides to reveal the app underneath. -->
+  <div id="authGate" class="auth-gate">
+    <div class="auth-card glass">
+      <h1>Macro Tracker</h1>
+      <p class="auth-sub">Enter your name and passcode</p>
+
+      <input type="text" id="authName" placeholder="Your name" autocomplete="off" />
+      <input type="password" id="authPasscode" placeholder="Passcode" autocomplete="off" inputmode="numeric" />
+
+      <p id="authError" class="auth-error"></p>
+
+      <button id="authLoginBtn" class="primary-btn">Log in</button>
+      <button id="authSignupBtn" class="ghost-btn">Create new profile</button>
+    </div>
+  </div>
+
+  <div id="appRoot" class="hidden">
+
   <header class="topbar">
     <button id="settingsBtn" class="icon-btn glass" aria-label="Settings">⚙</button>
     <div class="date-nav">
@@ -266,9 +285,17 @@
         <button id="settingsCancel" type="button" class="ghost-btn">Cancel</button>
         <button id="settingsSave" type="button" class="primary-btn">Save</button>
       </div>
+
+      <p class="logged-in-as">Logged in as <span id="loggedInAsName"></span></p>
+      <button id="logoutBtn" type="button" class="ghost-btn">Log out</button>
     </div>
   </div>
 
+  </div> <!-- /#appRoot -->
+
+  <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
