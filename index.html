@@ -306,8 +306,8 @@
 
         <div class="macro-inputs">
           <div class="field">
-            <label for="mealCalories">Calories</label>
-            <input type="number" id="mealCalories" min="0" step="1" required />
+            <label for="mealCalories">Calories <span class="field-hint-inline">(auto)</span></label>
+            <input type="number" id="mealCalories" min="0" step="1" required readonly />
           </div>
           <div class="field">
             <label for="mealCarbs">Carbs (g)</label>
@@ -322,6 +322,7 @@
             <input type="number" id="mealFat" min="0" step="1" required />
           </div>
         </div>
+        <p class="field-hint">Calories are calculated from carbs/protein/fat (4/4/9 kcal per gram) — edit the macros above and calories updates automatically, so they can't disagree.</p>
 
         <textarea id="mealNotes" class="notes-input" placeholder="Notes / thoughts (optional)"></textarea>
 

@@ -1108,6 +1108,24 @@ function compressImage(file, maxDimension, quality) {
 // re-estimateFromName below for why this exists).
 let editingMealId = null;
 
+// Calories must always equal what the macros actually add up to (4 kcal/g
+// carbs, 4 kcal/g protein, 9 kcal/g fat) — the standard Atwater conversion.
+// Kevin hit a real bug where editing carbs/protein/fat left the Calories
+// field showing a stale, disconnected number (whatever the AI originally
+// guessed). Fixed by making Calories a read-only, live-computed field: it
+// recalculates on every macro-field input, and every place that fills macros
+// programmatically (photo analysis, text re-estimate, opening the edit sheet)
+// calls this instead of trusting a separately-returned calorie number.
+function recalcMealCalories() {
+  const carbs = Number(document.getElementById("mealCarbs").value) || 0;
+  const protein = Number(document.getElementById("mealProtein").value) || 0;
+  const fat = Number(document.getElementById("mealFat").value) || 0;
+  document.getElementById("mealCalories").value = Math.round(carbs * 4 + protein * 4 + fat * 9);
+}
+["mealCarbs", "mealProtein", "mealFat"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", recalcMealCalories);
+});
+
 async function analyzeFoodPhoto(dataUrl) {
   const statusEl = document.getElementById("analyzeStatus");
   statusEl.textContent = "Analyzing photo…";
@@ -1126,10 +1144,12 @@ async function analyzeFoodPhoto(dataUrl) {
     if (!document.getElementById("mealName").value) {
       document.getElementById("mealName").value = result.description || "";
     }
-    document.getElementById("mealCalories").value = Math.round(result.calories || 0);
     document.getElementById("mealCarbs").value = Math.round(result.carbs_g || 0);
     document.getElementById("mealProtein").value = Math.round(result.protein_g || 0);
     document.getElementById("mealFat").value = Math.round(result.fat_g || 0);
+    // Deliberately not using result.calories directly — recalculate from the
+    // macros above so calories can never disagree with them (see recalcMealCalories).
+    recalcMealCalories();
 
     statusEl.textContent = "Estimated from photo — check the numbers before saving.";
   } catch (err) {
@@ -1160,10 +1180,10 @@ async function reestimateFromName() {
     if (!res.ok) throw new Error(`Backend returned ${res.status}`);
     const result = await res.json();
 
-    document.getElementById("mealCalories").value = Math.round(result.calories || 0);
     document.getElementById("mealCarbs").value = Math.round(result.carbs_g || 0);
     document.getElementById("mealProtein").value = Math.round(result.protein_g || 0);
     document.getElementById("mealFat").value = Math.round(result.fat_g || 0);
+    recalcMealCalories();
 
     statusEl.textContent = "Updated from “" + name + "” — check the numbers before saving.";
   } catch (err) {
@@ -1190,6 +1210,7 @@ function openAddMealSheet() {
   editingMealId = null;
   document.getElementById("mealSheetTitle").textContent = "Log a meal";
   document.getElementById("mealSubmitBtn").textContent = "Save meal";
+  recalcMealCalories(); // blank macro fields -> shows 0, not an empty field
   openSheet(addSheet);
 }
 
@@ -1198,10 +1219,13 @@ function openEditMealSheet(meal) {
   document.getElementById("mealSheetTitle").textContent = "Edit meal";
   document.getElementById("mealSubmitBtn").textContent = "Save changes";
   document.getElementById("mealName").value = meal.name;
-  document.getElementById("mealCalories").value = meal.calories;
   document.getElementById("mealCarbs").value = meal.carbs;
   document.getElementById("mealProtein").value = meal.protein;
   document.getElementById("mealFat").value = meal.fat;
+  // Recompute rather than trust the stored value — older entries (or
+  // AI-filled ones from before this fix) may have a calories number that
+  // doesn't actually match their macros. Editing always shows the true sum.
+  recalcMealCalories();
   document.getElementById("mealNotes").value = meal.notes || "";
   pendingPhoto = meal.photo || null;
   document.getElementById("photoPreview").innerHTML = meal.photo
