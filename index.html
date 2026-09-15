@@ -188,6 +188,8 @@
           </div>
         </div>
 
+        <textarea id="mealNotes" class="notes-input" placeholder="Notes / thoughts (optional)"></textarea>
+
         <div class="sheet-actions">
           <button type="button" id="sheetCancel" class="ghost-btn">Cancel</button>
           <button type="submit" class="primary-btn">Save meal</button>
@@ -229,6 +231,8 @@
         </div>
         <p id="pctOneRm" class="pct-hint"></p>
 
+        <textarea id="workoutNotes" class="notes-input" placeholder="Notes / thoughts (optional)"></textarea>
+
         <div class="sheet-actions">
           <button type="button" id="workoutSheetCancel" class="ghost-btn">Cancel</button>
           <button type="submit" class="primary-btn">Save exercise</button>
@@ -253,6 +257,8 @@
           <input type="number" id="weightInput" min="0" step="0.1" required />
         </div>
 
+        <textarea id="weightNotes" class="notes-input" placeholder="Notes / thoughts (optional)"></textarea>
+
         <div class="sheet-actions">
           <button type="button" id="weightSheetCancel" class="ghost-btn">Cancel</button>
           <button type="submit" class="primary-btn">Save weight</button>
@@ -265,6 +271,13 @@
   <div id="settingsSheet" class="sheet-backdrop">
     <div class="sheet glass">
       <div class="sheet-handle"></div>
+      <h2>Theme</h2>
+      <div class="theme-picker" id="themePicker">
+        <button type="button" class="theme-swatch" data-vibe-value="classic"><span class="swatch-emoji">✨</span>Classic</button>
+        <button type="button" class="theme-swatch" data-vibe-value="stark"><span class="swatch-emoji">🔴</span>Stark</button>
+        <button type="button" class="theme-swatch" data-vibe-value="mofusand"><span class="swatch-emoji">🐱</span>Mofusand</button>
+      </div>
+
       <h2>Daily targets</h2>
       <div class="field">
         <label for="targetCaloriesInput">Calories</label>

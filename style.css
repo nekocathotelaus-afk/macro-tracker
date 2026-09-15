@@ -37,6 +37,91 @@
   }
 }
 
+/* ==== Theme packs — each is a complete, fixed vibe (not light/dark-aware) ==== */
+
+/* --- Stark: dark HUD, gold/cyan/red accents, angular --- */
+[data-vibe="stark"] .app-shell {
+  color-scheme: dark;
+  --page-plane:     #050507;
+  --text-primary:   #f5f6fa;
+  --text-secondary: #9aa5b1;
+  --text-muted:     #6b7280;
+  --border:         rgba(232,35,42,0.25);
+  --glass-bg:       rgba(15,17,22,0.72);
+  --glass-border:   rgba(255,184,0,0.25);
+  --track:          rgba(255,255,255,0.08);
+
+  --series-1: #ffb800; /* calories - arc gold */
+  --series-2: #00d4ff; /* carbs - arc cyan */
+  --series-3: #e8232a; /* protein - stark red */
+  --series-4: #c7cdd6; /* fat - silver */
+  --status-critical: #ff3b3b;
+  font-family: "SF Mono", "Roboto Mono", Consolas, monospace;
+}
+[data-vibe="stark"] .hero-card, [data-vibe="stark"] .glass {
+  border-radius: 10px;
+  box-shadow: 0 0 24px rgba(255,184,0,0.12), inset 0 0 0 1px rgba(255,184,0,0.15);
+}
+[data-vibe="stark"] .fab { background: linear-gradient(145deg, #e8232a, #7a0e12); box-shadow: 0 0 30px rgba(232,35,42,0.6); }
+[data-vibe="stark"] .primary-btn, [data-vibe="stark"] .tab-btn.active { background: #e8232a; }
+[data-vibe="stark"] .bg-glow {
+  background:
+    radial-gradient(38vh 38vh at 15% 8%, rgba(255,184,0,0.25), transparent 70%),
+    radial-gradient(34vh 34vh at 90% 18%, rgba(0,212,255,0.2), transparent 70%),
+    radial-gradient(40vh 40vh at 20% 85%, rgba(232,35,42,0.2), transparent 70%),
+    radial-gradient(36vh 36vh at 95% 90%, rgba(199,205,214,0.12), transparent 70%);
+}
+
+/* --- Mofusand: pastel cartoon cat, soft and round --- */
+[data-vibe="mofusand"] .app-shell {
+  color-scheme: light;
+  --page-plane:     #fff3f6;
+  --text-primary:   #5b3a45;
+  --text-secondary: #a2757e;
+  --text-muted:     #c9a3ab;
+  --border:         rgba(184,110,130,0.18);
+  --glass-bg:       rgba(255,255,255,0.7);
+  --glass-border:   rgba(255,255,255,0.85);
+  --track:          rgba(184,110,130,0.12);
+
+  --series-1: #ff9fb8; /* calories - pink */
+  --series-2: #ffcf7a; /* carbs - butter yellow */
+  --series-3: #8fe0c2; /* protein - mint */
+  --series-4: #b9a6e8; /* fat - lavender */
+  --status-critical: #e8637a;
+}
+[data-vibe="mofusand"] .hero-card, [data-vibe="mofusand"] .glass,
+[data-vibe="mofusand"] .sheet, [data-vibe="mofusand"] .tab-switch { border-radius: 28px; }
+[data-vibe="mofusand"] .fab { background: linear-gradient(145deg, #ff9fb8, #e87a9a); box-shadow: 0 8px 24px rgba(255,159,184,0.5); }
+[data-vibe="mofusand"] .primary-btn, [data-vibe="mofusand"] .tab-btn.active { background: #ff9fb8; color: #5b3a45; }
+[data-vibe="mofusand"] .bg-glow {
+  background:
+    radial-gradient(38vh 38vh at 15% 8%, rgba(255,159,184,0.35), transparent 70%),
+    radial-gradient(34vh 34vh at 90% 18%, rgba(255,207,122,0.3), transparent 70%),
+    radial-gradient(40vh 40vh at 20% 85%, rgba(143,224,194,0.3), transparent 70%),
+    radial-gradient(36vh 36vh at 95% 90%, rgba(185,166,232,0.3), transparent 70%);
+}
+
+/* --- Theme picker (Settings sheet) --- */
+.theme-picker { display: flex; gap: 10px; margin: 4px 0 12px; }
+.theme-swatch {
+  flex: 1;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 6px;
+  background: var(--page-plane);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.theme-swatch .swatch-emoji { font-size: 20px; }
+.theme-swatch.active { border-color: var(--series-1); color: var(--text-primary); }
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 html, body {
@@ -331,6 +416,7 @@ select {
 .meal-info { flex: 1; min-width: 0; }
 .meal-name { font-size: 14px; font-weight: 600; }
 .meal-macros { font-size: 12px; color: var(--text-secondary); }
+.entry-notes { font-size: 12px; color: var(--text-muted); font-style: italic; margin-top: 2px; }
 .delete-btn {
   background: none;
   border: none;
@@ -455,6 +541,18 @@ input[type="text"], input[type="number"] {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+.notes-input {
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--page-plane);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
 }
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field label { font-size: 12px; color: var(--text-secondary); }

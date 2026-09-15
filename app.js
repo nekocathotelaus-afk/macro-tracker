@@ -9,8 +9,22 @@ const DEFAULT_TARGETS = { calories: 2000, carbs: 200, protein: 150, fat: 65 };
 const DEFAULT_ACTIVITY_LEVEL = 24;
 
 // In-memory mirror of the logged-in profile's Firestore data.
-let cloud = { targets: { ...DEFAULT_TARGETS }, activityLevel: DEFAULT_ACTIVITY_LEVEL, oneRepMaxes: {}, days: {} };
+let cloud = { targets: { ...DEFAULT_TARGETS }, activityLevel: DEFAULT_ACTIVITY_LEVEL, oneRepMaxes: {}, theme: "classic", days: {} };
 let profileDocRef = null;
+
+function applyTheme() {
+  document.body.setAttribute("data-vibe", cloud.theme || "classic");
+  document.querySelectorAll(".theme-swatch").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.vibeValue === (cloud.theme || "classic"));
+  });
+}
+
+document.getElementById("themePicker").addEventListener("click", (e) => {
+  const btn = e.target.closest(".theme-swatch");
+  if (!btn) return;
+  saveSettings({ theme: btn.dataset.vibeValue });
+  applyTheme();
+});
 
 const EXERCISE_LIBRARY = {
   Chest: ["Bench Press", "Incline Bench Press", "Dumbbell Press", "Push-up", "Chest Fly"],
@@ -298,6 +312,7 @@ function render() {
         <div class="meal-info">
           <div class="meal-name">${escapeHtml(m.name)}</div>
           <div class="meal-macros">${m.calories} cal · C ${m.carbs}g · P ${m.protein}g · F ${m.fat}g</div>
+          ${notesHtml(m.notes)}
         </div>
         <button class="delete-btn" data-id="${m.id}" aria-label="Delete meal">✕</button>
       `;
@@ -313,6 +328,10 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+function notesHtml(notes) {
+  return notes ? `<div class="entry-notes">"${escapeHtml(notes)}"</div>` : "";
 }
 
 function formatShortDate(isoDate) {
@@ -340,6 +359,7 @@ function renderWorkoutView() {
         <div class="meal-info">
           <div class="meal-name">${escapeHtml(w.exercise)}</div>
           <div class="meal-macros">${w.weight}kg${pctText} × ${w.reps} reps × ${w.sets} sets</div>
+          ${notesHtml(w.notes)}
         </div>
         <button class="delete-btn" data-id="${w.id}" aria-label="Delete exercise">✕</button>
       `;
@@ -416,6 +436,7 @@ function renderWeightView() {
         ${wt.photo ? `<img class="meal-thumb" src="${wt.photo}" alt="" />` : `<div class="meal-thumb"></div>`}
         <div class="meal-info">
           <div class="meal-name">${wt.weight}kg</div>
+          ${notesHtml(wt.notes)}
         </div>
         <button class="delete-btn" data-id="${wt.id}" aria-label="Delete weigh-in">✕</button>
       `;
@@ -528,6 +549,7 @@ document.getElementById("weightForm").addEventListener("submit", (e) => {
     id: Date.now().toString(),
     weight: Number(document.getElementById("weightInput").value) || 0,
     photo: pendingWeightPhoto,
+    notes: document.getElementById("weightNotes").value.trim(),
     time: new Date().toISOString(),
   };
 
@@ -581,6 +603,7 @@ document.getElementById("workoutForm").addEventListener("submit", (e) => {
     sets: Number(document.getElementById("exerciseSets").value) || 0,
     reps: Number(document.getElementById("exerciseReps").value) || 0,
     pct: oneRm > 0 && weight > 0 ? Math.round((weight / oneRm) * 100) : null,
+    notes: document.getElementById("workoutNotes").value.trim(),
     time: new Date().toISOString(),
   };
 
@@ -714,6 +737,7 @@ document.getElementById("mealForm").addEventListener("submit", (e) => {
     protein: Number(document.getElementById("mealProtein").value) || 0,
     fat: Number(document.getElementById("mealFat").value) || 0,
     photo: pendingPhoto,
+    notes: document.getElementById("mealNotes").value.trim(),
     time: new Date().toISOString(),
   };
 
@@ -752,6 +776,7 @@ function sanitizeProfileKey(name) {
 function showApp() {
   document.getElementById("authGate").classList.add("hidden");
   document.getElementById("appRoot").classList.remove("hidden");
+  applyTheme();
   render();
 }
 
@@ -773,6 +798,7 @@ async function loadCloudData(key) {
   cloud.targets = data.targets || { ...DEFAULT_TARGETS };
   cloud.activityLevel = data.activityLevel || DEFAULT_ACTIVITY_LEVEL;
   cloud.oneRepMaxes = data.oneRepMaxes || {};
+  cloud.theme = data.theme || "classic";
   cloud.days = {};
 
   const daysSnap = await profileDocRef.collection("days").get();
@@ -824,6 +850,7 @@ async function attemptSignup() {
       targets: { ...DEFAULT_TARGETS },
       activityLevel: DEFAULT_ACTIVITY_LEVEL,
       oneRepMaxes: {},
+      theme: "classic",
     });
     await enterApp(key, rawName.trim());
   } catch (err) {
