@@ -945,15 +945,17 @@ addSheet.addEventListener("click", (e) => { if (e.target === addSheet) cancelMea
 document.getElementById("weightSheetCancel").addEventListener("click", () => closeSheet(addWeightSheet));
 addWeightSheet.addEventListener("click", (e) => { if (e.target === addWeightSheet) closeSheet(addWeightSheet); });
 
-document.getElementById("weightPhotoInput").addEventListener("change", (e) => {
+document.getElementById("weightPhotoInput").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    pendingWeightPhoto = reader.result;
-    document.getElementById("weightPhotoPreview").innerHTML = `<img src="${pendingWeightPhoto}" alt="Progress photo" />`;
-  };
-  reader.readAsDataURL(file);
+  // Was reading the raw file straight to a full-resolution base64 data URL
+  // (a real phone photo can be several MB) and dropping that directly into
+  // an <img> — decoding/rendering something that large is what caused the
+  // screen to flicker/jank while adding a progress photo. Reusing the same
+  // canvas-downscale used for meal photos fixes the flicker and keeps the
+  // stored entry well under Firestore's 1MB-per-document limit.
+  pendingWeightPhoto = await compressImage(file, 800, 0.8);
+  document.getElementById("weightPhotoPreview").innerHTML = `<img src="${pendingWeightPhoto}" alt="Progress photo" />`;
 });
 
 document.getElementById("weightForm").addEventListener("submit", (e) => {
