@@ -617,7 +617,13 @@ select {
 .photo-label { align-self: flex-start; width: 100%; }
 .photo-preview {
   width: 100%;
-  min-height: 44px;
+  /* Fixed, not min — reserving the full height up front means adding a
+     photo doesn't grow the box and reflow everything below it (macro
+     fields, buttons) inside an already-expensive backdrop-filter sheet.
+     That reflow-while-blurring was the real cause of the reported flicker,
+     not image file size — the earlier compression fix was real (protects
+     against the 1MB Firestore limit and slow decode) but didn't touch this. */
+  height: 160px;
   border: 1px dashed var(--border);
   border-radius: 14px;
   display: flex;
@@ -627,10 +633,13 @@ select {
   color: var(--text-secondary);
   cursor: pointer;
   overflow: hidden;
+  /* Isolate this box's repaint from the rest of the blurred sheet so
+     swapping its contents doesn't force a wider backdrop-filter recompute. */
+  contain: layout paint;
 }
 .photo-preview img {
   width: 100%;
-  max-height: 160px;
+  height: 100%;
   object-fit: cover;
   border-radius: 14px;
 }
